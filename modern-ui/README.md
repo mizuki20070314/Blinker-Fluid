@@ -45,26 +45,36 @@ your installer of choice). A free‑certificate sideload strips the entitlements
 
 ### JavaScript engine speed
 
-The *Settings → JavaScript Engine* list is not a list of engines to install; it picks how far V8 may compile JavaScript:
+*Settings → JavaScript Engine* is not a list of engines to install: it chooses how far V8 may compile JavaScript, and it only
+has an effect in the **JIT build** (the stable build always runs V8's `--jitless` interpreter and shows rows 2–5 greyed out with
+"Requires the JIT build"; the two builds are the same binary and differ only in the bundle identifier).
 
-| Tier | What V8 does | Needs JIT |
+| Tier (name in the list) | What V8 may do | Flags the engine passes |
 |---|---|---|
-| 1 Interpreter | bytecode interpreter only | no |
-| 2 Baseline | + Sparkplug (fast first compile) | yes |
-| 3 Balanced | + Maglev (mid‑tier optimiser) and the regexp compiler | yes |
-| 4 Full | + TurboFan (the default of the JIT build) | yes |
-| 5 Full + Wasm | + WebAssembly compilers | yes |
+| 1 Interpreter | no compiled code | `--no-sparkplug --regexp-interpret-all --wasm-jitless --disable-optimizing-compilers` |
+| 2 Baseline JIT | + Sparkplug | `--sparkplug --regexp-interpret-all --wasm-jitless --disable-optimizing-compilers` |
+| 3 Balanced JIT | + Maglev and the regexp compiler | `--maglev-as-top-tier --wasm-jitless` |
+| 4 Full JIT (default) | + TurboFan | `--wasm-jitless` |
+| 5 Full JIT + WebAssembly | + the WebAssembly compilers | (none) |
 
-Only the **JIT build** may generate machine code, and only while its process counts as "debugged" (the engine checks the
-code‑signing flag `CS_DEBUGGED`). The app can set that flag itself only through Dopamine's `libjailbreak` (iOS 15+), and
-TrollStore offers "Open with JIT"; a way to do it on iOS 12 is not known here. Without the flag the engine falls back to the
-interpreter whatever tier is chosen, so on iOS 12 the tier matters only if the JIT build really gets JIT. The upstream issues about
-the JIT build on iOS 12.5 devices (iPad mini 2: #21, iPad Air 1: #27) report crashes.
+At launch the JIT build asks whether generated code may run, and silently falls back to the jitless interpreter if not
+(`shell_main_delegate.cc`). It may run when **either**
+
+* the process is "debugged" (`CS_DEBUGGED`): the app asks Dopamine's `libjailbreak` for it (iOS 15+), or TrollStore's
+  "Open with JIT" sets it; **or**
+* two probes show that the kernel lets the process execute memory it wrote itself (the palera1n path – which jailbreaks on
+  iOS 12 pass is not known here).
+
+After a crash with SIGILL / SIGBUS / SIGSEGV / SIGTRAP in tier 2 or higher the engine steps down one tier at the next launch.
+The release build has no JIT lines in `blink_boot.log`, and the list shows the tier that was *chosen*, so nothing on screen says
+whether JIT is really running. The upstream issues about iOS 12.5 are still open: #21 (iPad mini 2: the JIT build crashes on
+every site, the jitless one works but is slow; a fix was promised for v.0.3.2, not released yet) and #27 (iPad Air 1: crashes
+after a few seconds with both builds).
 
 To find out on your device, use the menu's **JavaScript Speed Test**: it opens a page that times four small workloads and prints
-a TOTAL (lower is faster). Run it once per tier (quit and reopen the app after changing the tier); if the numbers do not drop,
-JIT is not active and the stable build is the better choice. On a 1 GB iPod touch, *Baseline* or *Balanced* are the tiers to
-try first – *Full* compiles the most and needs the most memory.
+a TOTAL (lower is faster). Run it in the stable build, then in the JIT build once per tier (quit and reopen the app after
+changing the tier); if the numbers do not drop, JIT is not active and the stable build is the better choice. On a 1 GB iPod touch,
+*Baseline* or *Balanced* are the tiers to try first – *Full* compiles the most and needs the most memory.
 
 ### If something is wrong
 
