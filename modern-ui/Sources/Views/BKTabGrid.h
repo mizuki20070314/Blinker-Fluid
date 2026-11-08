@@ -8,6 +8,9 @@
 NS_ASSUME_NONNULL_BEGIN
 
 @interface BKTabGridViewController : UIViewController
+// The stock list refuses to close the last tab.  A browser replaces it with a fresh one instead; the owner of the grid does that
+// (open a new tab, then close the old one) in this block, which runs after the grid has gone.
+@property(nonatomic, copy, nullable) void (^onCloseLastTab)(void);
 // `stock` is the BlinkTabsVC the stock code built; `currentURL` marks the open tab; the crop fractions remove the bars from
 // the window snapshots the stock code takes of every tab.
 - (instancetype)initWithStockTabs:(UIViewController *)stock

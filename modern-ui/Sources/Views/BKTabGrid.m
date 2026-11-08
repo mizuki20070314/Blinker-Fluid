@@ -361,6 +361,17 @@ static const CGFloat kHeaderHeight = 34;
   }
   NSIndexPath *path = [NSIndexPath indexPathForItem:index inSection:0];
   UICollectionViewCell *cell = [_collection cellForItemAtIndexPath:path];
+  if (_titles.count <= 1) {
+    void (^replace)(void) = self.onCloseLastTab;
+    if (replace) {
+      [UIView animateWithDuration:0.18 animations:^{
+        cell.contentView.alpha = 0;
+        cell.contentView.transform = CGAffineTransformMakeScale(0.9, 0.9);
+      }];
+      [self dismissViewControllerAnimated:YES completion:^{ replace(); }];
+      return;
+    }
+  }
   BOOL ok = _onClose ? _onClose(index) : YES;
   if (!ok) {  // the last tab (or the open tab, which the stock code hands over itself): bring the card back
     [UIView animateWithDuration:0.25 animations:^{

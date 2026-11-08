@@ -27,7 +27,7 @@ xcrun simctl boot "$UDID" 2>/dev/null || true
 xcrun simctl bootstatus "$UDID" -b >/dev/null
 xcrun simctl install "$UDID" "$APP"
 
-for variant in ${BK_VARIANTS:-light dark bottom private ja landscape guardtest}; do
+for variant in ${BK_VARIANTS:-light dark bottom private ja landscape guardtest imetest}; do
   echo "== variant $variant"
   xcrun simctl launch "$UDID" jp.tank.bk.harness -bk-variant "$variant" >/dev/null
   CONTAINER="$(xcrun simctl get_app_container "$UDID" jp.tank.bk.harness data)"
@@ -56,5 +56,9 @@ if grep -q "^FAIL" "$OUT"/*-checks.txt; then
 fi
 if [ "$(grep -c '^PASS' "$OUT"/guardtest-checks.txt)" -lt 10 ]; then
   echo "the guard test did not run completely"
+  exit 1
+fi
+if [ "$(grep -c '^PASS' "$OUT"/imetest-checks.txt)" -lt 18 ]; then
+  echo "the input-method test did not run completely"
   exit 1
 fi

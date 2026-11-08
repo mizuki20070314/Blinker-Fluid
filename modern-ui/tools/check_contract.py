@@ -2,7 +2,7 @@
 """Check Sources/Hooks/BKContract.inc against the Objective-C metadata of a real content_shell_framework.
 
     python3 objc_dump.py <content_shell_framework> objc.json
-    python3 check_contract.py ../Sources/Hooks/BKContract.inc objc.json
+    python3 check_contract.py objc.json ../Sources/Hooks/BKContract.inc ../Sources/Hooks/BKContractIME.inc
 
 Every BK_METHOD("Class", "selector", "shape") must exist as an instance method of that class with that signature (type encoding
 without frame offsets) and every BK_IVAR("Class", "_name") must be an ivar of it.  Exit status 1 when anything is off, so CI fails
@@ -18,9 +18,9 @@ def shape(types):
 
 
 def main(argv):
-    inc, dump = argv[1], argv[2]
+    dump, incs = argv[1], argv[2:]
     meta = json.load(open(dump, encoding="utf-8"))["classes"]
-    text = open(inc, encoding="utf-8").read()
+    text = "\n".join(open(inc, encoding="utf-8").read() for inc in incs)
     methods = re.findall(r'^BK_METHOD\("([^"]+)",\s*"([^"]+)",\s*"([^"]+)"\)', text, re.M)
     ivars = re.findall(r'^BK_IVAR\("([^"]+)",\s*"([^"]+)"\)', text, re.M)
     bad = 0

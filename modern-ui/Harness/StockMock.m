@@ -66,6 +66,8 @@
 @property(nonatomic, strong) UIProgressView* loadingProgressView;
 @property(nonatomic, strong) NSArray<NSLayoutConstraint*>* loadingProgressConstraints;
 @property(nonatomic, copy) NSString* harnessURL;
+@property(nonatomic, assign) NSInteger harnessTabCount;
+@property(nonatomic, weak) UINavigationController* lastStockMenuNav;
 @property(nonatomic, strong) MockWebView* harnessWeb;
 @end
 
@@ -359,6 +361,7 @@ static void Note(NSString* line) {
     }
   };
   UINavigationController* nav = [[UINavigationController alloc] initWithRootViewController:vc];
+  self.lastStockMenuNav = nav;
   nav.modalPresentationStyle = UIModalPresentationPopover;
   nav.preferredContentSize = CGSizeMake(MIN(340, self.view.bounds.size.width - 36), MIN(500, self.view.bounds.size.height - 130));
   UIColor* menuChrome = [UIColor colorWithWhite:0.09 alpha:1.0];
@@ -385,10 +388,14 @@ static void Note(NSString* line) {
   BlinkTabsVC* vc = [[BlinkTabsVC alloc] initWithCollectionViewLayout:layout];
   vc.titles = [@[ @"Example Domain", @"GitHub", @"Wikipedia", @"New Tab" ] mutableCopy];
   vc.urls = [@[ @"https://example.com/", @"https://github.com/", @"https://ja.wikipedia.org/", @"about:blank" ] mutableCopy];
+  if (self.harnessTabCount == 1) {
+    [vc.titles removeObjectsInRange:NSMakeRange(1, 3)];
+    [vc.urls removeObjectsInRange:NSMakeRange(1, 3)];
+  }
   vc.previews = [NSMutableArray array];
   NSArray<UIColor*>* colors = @[ [UIColor colorWithRed:0.1 green:0.4 blue:0.9 alpha:1], [UIColor colorWithWhite:0.15 alpha:1], [UIColor colorWithWhite:0.96 alpha:1], [UIColor clearColor] ];
   CGSize size = self.view.bounds.size;
-  for (NSUInteger i = 0; i < 4; i++) {
+  for (NSUInteger i = 0; i < vc.titles.count; i++) {
     MockWebView* web = [[MockWebView alloc] initWithFrame:CGRectMake(0, 0, size.width, size.height)];
     web.accentColor = colors[i];
     web.pageTitle = vc.titles[i];

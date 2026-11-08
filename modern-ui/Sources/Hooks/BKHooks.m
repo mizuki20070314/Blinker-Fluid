@@ -6,6 +6,7 @@
 #import "BKHooks.h"
 #import "BKChrome.h"
 #import "BKCore.h"
+#import "BKIME.h"
 #import "BKListStyle.h"
 #import "BKSettings.h"
 #import "BKStartPageView.h"
@@ -307,10 +308,32 @@ static UIViewController *BKReplacementForPresentation(id host, UIViewController 
       }
       BKFeatureEnd(@"tabgrid");
     };
-    return [[BKTabGridViewController alloc] initWithStockTabs:root currentURL:chrome.urlString cropTop:top cropBottom:bottom];
+    BKTabGridViewController *grid = [[BKTabGridViewController alloc] initWithStockTabs:root currentURL:chrome.urlString cropTop:top cropBottom:bottom];
+    __weak id weakHost = host;
+    grid.onCloseLastTab = ^{
+      // Closing the only tab leaves a fresh one: open a new tab (the stock code shows it), then close the old one.
+      id strongHost = weakHost;
+      if (!strongHost) {
+        return;
+      }
+      [(id<BKStockHost>)strongHost openNewTab];
+      dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.4 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+        id again = weakHost;
+        if (again) {
+          ((void (*)(id, SEL))objc_msgSend)(again, NSSelectorFromString(@"closeCurrentTab"));
+        }
+      });
+    };
+    return grid;
   }
   if ([BKListStyle isMainMenuList:root] && BKFeatureAllowed(@"menu")) {
     BKFeatureBegin(@"menu");
+    // The stock code already asked this navigation controller for its popover presentation controller; on iOS 12 UIKit keeps
+    // presenting it as a popover whatever style is set afterwards.  Put the menu list into a fresh one.
+    UIViewController *menuRoot = root;
+    nav.viewControllers = @[];
+    UINavigationController *sheetNav = [[UINavigationController alloc] initWithRootViewController:menuRoot];
+    nav = sheetNav;
     [BKListStyle prepareMenuNavigation:nav];
     void (^previous)(void) = *completion;
     *completion = ^{
@@ -340,6 +363,7 @@ static void hook_present(id self, SEL _cmd, UIViewController *presented, BOOL an
 // ------------------------------------------------------------------------------------------------------------ install
 
 void BKInstallHooks(void) {
+  BKInstallIMEHooks();   // (has its own contract: it must not depend on the UI contract, nor the other way round)
   if (!BKContractHolds()) {
     BKLog(@"hooks: the stock binary does not match the contract - the stock UI stays in charge");
     return;

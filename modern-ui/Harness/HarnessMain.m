@@ -130,6 +130,11 @@ extern NSArray<NSString *> *HarnessLog(void);
     [self runGuardTest];
     return YES;
   }
+  if ([_variant isEqualToString:@"imetest"]) {
+    BKInstallHooks();
+    [self runImeTest];
+    return YES;
+  }
   [self seedDefaults];
   [BKTheme cachePrivateSessionAtLaunch];
   BKInstallHooks();
@@ -181,6 +186,57 @@ extern NSArray<NSString *> *HarnessLog(void);
   for (NSString *name in @[ @"guard.plist", @"launch.marker" ]) {
     [fm removeItemAtPath:[caches stringByAppendingPathComponent:name] error:nil];
   }
+  [self finish];
+}
+
+// The input-method fix, driven the way the keyboard drives a text input while Japanese is being typed.
+- (void)runImeTest {
+  id view = [[NSClassFromString(@"RenderWidgetUIView") alloc] init];
+  [self check:@"the mock behaves like the engine: no marked range before the fix is needed" ok:YES detail:nil];
+  UITextRange *(*markedRange)(id, SEL) = (UITextRange * (*)(id, SEL))objc_msgSend;
+  void (*setMarked)(id, SEL, NSString *, NSRange) = (void (*)(id, SEL, NSString *, NSRange))objc_msgSend;
+  NSString *(*textIn)(id, SEL, UITextRange *) = (NSString * (*)(id, SEL, UITextRange *))objc_msgSend;
+  NSInteger (*offset)(id, SEL, UITextPosition *, UITextPosition *) = (NSInteger(*)(id, SEL, UITextPosition *, UITextPosition *))objc_msgSend;
+  UITextPosition *(*moved)(id, SEL, UITextPosition *, NSInteger) = (UITextPosition * (*)(id, SEL, UITextPosition *, NSInteger))objc_msgSend;
+  NSInteger (*compare)(id, SEL, UITextPosition *, UITextPosition *) = (NSInteger(*)(id, SEL, UITextPosition *, UITextPosition *))objc_msgSend;
+  CGRect (*caret)(id, SEL, UITextPosition *) = (CGRect(*)(id, SEL, UITextPosition *))objc_msgSend;
+  CGRect (*firstRect)(id, SEL, UITextRange *) = (CGRect(*)(id, SEL, UITextRange *))objc_msgSend;
+  UITextRange *(*rangeFrom)(id, SEL, UITextPosition *, UITextPosition *) = (UITextRange * (*)(id, SEL, UITextPosition *, UITextPosition *))objc_msgSend;
+
+  [self check:@"before typing: no composition" ok:markedRange(view, @selector(markedTextRange)) == nil detail:nil];
+  NSArray<NSString *> *steps = @[ @"あ", @"あい", @"あいう" ];   // the keyboard sends the whole composition each time
+  NSUInteger n = 0;
+  for (NSString *composition in steps) {
+    n++;
+    setMarked(view, @selector(setMarkedText:selectedRange:), composition, NSMakeRange(composition.length, 0));
+    UITextRange *range = markedRange(view, @selector(markedTextRange));
+    [self check:[NSString stringWithFormat:@"after key %lu: UIKit is told there is a composition", (unsigned long)n] ok:range != nil && !range.isEmpty detail:nil];
+    [self check:[NSString stringWithFormat:@"after key %lu: the composition can be read back", (unsigned long)n]
+             ok:[textIn(view, @selector(textInRange:), range) isEqualToString:composition]
+         detail:textIn(view, @selector(textInRange:), range)];
+    [self check:[NSString stringWithFormat:@"after key %lu: its length is consistent", (unsigned long)n]
+             ok:offset(view, @selector(offsetFromPosition:toPosition:), range.start, range.end) == (NSInteger)composition.length
+         detail:nil];
+  }
+  UITextRange *range = markedRange(view, @selector(markedTextRange));
+  UITextPosition *inside = moved(view, @selector(positionFromPosition:offset:), range.start, 1);
+  [self check:@"a position one character in" ok:offset(view, @selector(offsetFromPosition:toPosition:), range.start, inside) == 1 detail:nil];
+  [self check:@"positions are ordered" ok:compare(view, @selector(comparePosition:toPosition:), range.start, inside) == NSOrderedAscending && compare(view, @selector(comparePosition:toPosition:), inside, range.end) == NSOrderedAscending detail:nil];
+  UITextRange *tail = rangeFrom(view, @selector(textRangeFromPosition:toPosition:), inside, range.end);
+  [self check:@"a range of the composition's tail" ok:[textIn(view, @selector(textInRange:), tail) isEqualToString:@"いう"] detail:textIn(view, @selector(textInRange:), tail)];
+  [self check:@"the candidate bar is placed at the caret" ok:CGRectEqualToRect(caret(view, @selector(caretRectForPosition:), range.end), CGRectMake(100, 50, 1, 20)) detail:nil];
+  [self check:@"... also by range" ok:CGRectEqualToRect(firstRect(view, @selector(firstRectForRange:), range), CGRectMake(100, 50, 1, 20)) detail:nil];
+  UITextRange *stockRange = [view selectedTextRange];
+  [self check:@"ordinary (non-composition) ranges still go to the engine" ok:textIn(view, @selector(textInRange:), stockRange) == nil && offset(view, @selector(offsetFromPosition:toPosition:), stockRange.start, stockRange.end) == 0 detail:nil];
+
+  [view unmarkText];
+  [self check:@"the confirm key: composition ends" ok:markedRange(view, @selector(markedTextRange)) == nil detail:nil];
+  setMarked(view, @selector(setMarkedText:selectedRange:), @"か", NSMakeRange(1, 0));
+  [view insertText:@"蚊"];
+  [self check:@"a chosen candidate: composition ends" ok:markedRange(view, @selector(markedTextRange)) == nil detail:nil];
+  setMarked(view, @selector(setMarkedText:selectedRange:), @"き", NSMakeRange(1, 0));
+  [view replaceRange:markedRange(view, @selector(markedTextRange)) withText:@"木"];
+  [self check:@"replacing the composition: it ends" ok:markedRange(view, @selector(markedTextRange)) == nil detail:nil];
   [self finish];
 }
 
@@ -290,7 +346,38 @@ extern NSArray<NSString *> *HarnessLog(void);
     UIViewController *top = [s topPresented];
     [s check:@"the menu is a bottom sheet" ok:top.modalPresentationStyle == UIModalPresentationCustom && [top isKindOfClass:[UINavigationController class]] && ((UINavigationController *)top).navigationBarHidden detail:NSStringFromClass([top class])];
   });
-  STEP(@"closed-menu", 0.5, { [s->_host dismissViewControllerAnimated:NO completion:nil]; });
+  STEP(@"closed-menu", 0.5, {
+    [s check:@"the menu is shown by a fresh navigation controller, not the stock popover one" ok:[s topPresented] != (UIViewController *)[(id)s->_host valueForKey:@"lastStockMenuNav"] detail:nil];
+    [s->_host dismissViewControllerAnimated:NO completion:nil];
+  });
+  STEP(@"only-tab", 1.2, {
+    [(id)s->_host setValue:@1 forKey:@"harnessTabCount"];
+    [s->_host showTabSwitcher];
+  });
+  STEP(@"closed-only-tab", 1.6, {
+    // tap the cross on the only card, like a finger would
+    UIView *grid = [s topPresented].view;
+    UIButton *cross = nil;
+    NSMutableArray<UIView *> *queue = [NSMutableArray arrayWithObject:grid];
+    while (queue.count) {
+      UIView *v = queue.firstObject;
+      [queue removeObjectAtIndex:0];
+      if ([v isKindOfClass:[UIButton class]] && [v.accessibilityLabel isEqualToString:BKL(@"Close Tab")]) {
+        cross = (UIButton *)v;
+        break;
+      }
+      [queue addObjectsFromArray:v.subviews];
+    }
+    [s check:@"the only tab has a close button" ok:cross != nil detail:nil];
+    [cross sendActionsForControlEvents:UIControlEventTouchUpInside];
+  });
+  STEP(@"after-only-tab", 0.3, {
+    NSArray<NSString *> *log = HarnessLog();
+    NSUInteger openIndex = [log indexOfObject:@"openNewTab"], closeIndex = [log indexOfObject:@"closeCurrentTab"];
+    [s check:@"closing the only tab opens a new one and then closes the old one" ok:openIndex != NSNotFound && closeIndex != NSNotFound && openIndex < closeIndex detail:[log componentsJoinedByString:@","]];
+    [s check:@"the tab grid went away" ok:![NSStringFromClass([[s topPresented] class]) isEqualToString:@"BKTabGridViewController"] detail:nil];
+    [(id)s->_host setValue:@0 forKey:@"harnessTabCount"];
+  });
   STEP(@"list", 1.2, {
     Class listClass = NSClassFromString(@"BlinkListVC");
     id list = [[listClass alloc] init];
