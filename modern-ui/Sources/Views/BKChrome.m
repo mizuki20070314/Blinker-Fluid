@@ -38,6 +38,9 @@ static NSHashTable<UIViewController *> *BKAllHosts(void) {
 @implementation BKSwipeShim
 @end
 
+@interface BKChrome () <UIGestureRecognizerDelegate>
+@end
+
 @implementation BKChrome {
   __weak UIViewController<BKStockHost> *_host;
   NSArray<NSLayoutConstraint *> *_ownConstraints;
@@ -47,6 +50,7 @@ static NSHashTable<UIViewController *> *BKAllHosts(void) {
   BOOL _installed;
   NSString *_urlString;
   BOOL _chromeHidden;
+  UIImageView *_edgeBubble;
 }
 
 @synthesize host = _host;
@@ -174,6 +178,7 @@ static NSHashTable<UIViewController *> *BKAllHosts(void) {
   [self applyLayout];
   [self refreshTabCount];
   [self updateDownloadBadge];
+  [self installEdgeGestures];
   view.accessibilityElements = @[ _topBar, [host contentView], _bottomBar ];
   [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(applyTheme) name:BKThemeDidChangeNotification object:nil];
   [host setNeedsStatusBarAppearanceUpdate];
@@ -446,6 +451,102 @@ static NSHashTable<UIViewController *> *BKAllHosts(void) {
                      pill.alpha = 1;
                    }
                    completion:nil];
+}
+
+// ------------------------------------------------------------------------------------------------- edge swipes
+
+// Swipe in from the left edge = back, from the right edge = forward (the engine has no gesture of its own).
+- (void)installEdgeGestures {
+  UIView *view = _host.view;
+  const UIRectEdge edges[2] = {UIRectEdgeLeft, UIRectEdgeRight};
+  for (int i = 0; i < 2; i++) {
+    UIScreenEdgePanGestureRecognizer *pan = [[UIScreenEdgePanGestureRecognizer alloc] initWithTarget:self action:@selector(edgePanned:)];
+    pan.edges = edges[i];
+    pan.delegate = self;
+    pan.cancelsTouchesInView = NO;
+    [view addGestureRecognizer:pan];
+  }
+}
+
+- (BOOL)gestureRecognizerShouldBegin:(UIGestureRecognizer *)gesture {
+  if (![gesture isKindOfClass:[UIScreenEdgePanGestureRecognizer class]]) {
+    return YES;
+  }
+  if (_omnibox || _chromeHidden || _host.presentedViewController) {
+    return NO;
+  }
+  const BOOL back = ((UIScreenEdgePanGestureRecognizer *)gesture).edges == UIRectEdgeLeft;
+  return back ? _bottomBar.backButton.enabled : _bottomBar.forwardButton.enabled;
+}
+
+- (BOOL)gestureRecognizer:(UIGestureRecognizer *)gesture shouldRecognizeSimultaneouslyWithGestureRecognizer:(UIGestureRecognizer *)other {
+  return YES;
+}
+
+- (void)placeEdgeBubbleForBack:(BOOL)back distance:(CGFloat)dx threshold:(CGFloat)threshold {
+  UIView *view = _host.view;
+  const CGFloat travel = MIN(dx * 0.6, 72);
+  const CGFloat x = back ? -22 + travel : view.bounds.size.width + 22 - travel;
+  _edgeBubble.center = CGPointMake(x, view.bounds.size.height / 2);
+  _edgeBubble.alpha = MIN(dx / 40.0, 1.0);
+  _edgeBubble.tintColor = dx >= threshold ? [BKTheme accent] : [BKTheme iconTint];
+}
+
+- (void)edgePanned:(UIScreenEdgePanGestureRecognizer *)pan {
+  UIView *view = _host.view;
+  const BOOL back = pan.edges == UIRectEdgeLeft;
+  const CGFloat dx = fabs([pan translationInView:view].x);
+  const CGFloat threshold = 84;
+  switch (pan.state) {
+    case UIGestureRecognizerStateBegan: {
+      [_edgeBubble removeFromSuperview];
+      UIImageView *bubble = [[UIImageView alloc] initWithImage:[BKIcons image:back ? BKIconBack : BKIconForward size:22]];
+      bubble.contentMode = UIViewContentModeCenter;
+      bubble.frame = CGRectMake(0, 0, 44, 44);
+      bubble.layer.cornerRadius = 22;
+      bubble.backgroundColor = [BKTheme chromeBackground];
+      bubble.layer.shadowColor = UIColor.blackColor.CGColor;
+      bubble.layer.shadowOpacity = 0.25;
+      bubble.layer.shadowRadius = 6;
+      bubble.layer.shadowOffset = CGSizeMake(0, 2);
+      bubble.layer.shadowPath = [UIBezierPath bezierPathWithOvalInRect:bubble.bounds].CGPath;
+      bubble.alpha = 0;
+      [view addSubview:bubble];
+      _edgeBubble = bubble;
+      [self placeEdgeBubbleForBack:back distance:dx threshold:threshold];
+      break;
+    }
+    case UIGestureRecognizerStateChanged:
+      [self placeEdgeBubbleForBack:back distance:dx threshold:threshold];
+      break;
+    case UIGestureRecognizerStateEnded: {
+      const CGFloat velocity = fabs([pan velocityInView:view].x);
+      UIImageView *bubble = _edgeBubble;
+      _edgeBubble = nil;
+      const BOOL go = dx >= threshold || (dx > 40 && velocity > 700);
+      [UIView animateWithDuration:0.18
+          animations:^{
+            bubble.alpha = 0;
+            bubble.transform = CGAffineTransformMakeScale(go ? 1.15 : 0.8, go ? 1.15 : 0.8);
+          }
+          completion:^(BOOL finished) { [bubble removeFromSuperview]; }];
+      if (go) {
+        [[[UIImpactFeedbackGenerator alloc] initWithStyle:UIImpactFeedbackStyleLight] impactOccurred];
+        if (back) {
+          [_host back];
+        } else {
+          [_host forward];
+        }
+      }
+      break;
+    }
+    default: {
+      UIImageView *bubble = _edgeBubble;
+      _edgeBubble = nil;
+      [UIView animateWithDuration:0.15 animations:^{ bubble.alpha = 0; } completion:^(BOOL finished) { [bubble removeFromSuperview]; }];
+      break;
+    }
+  }
 }
 
 @end

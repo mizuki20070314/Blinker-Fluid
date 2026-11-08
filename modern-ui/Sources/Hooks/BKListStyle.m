@@ -303,6 +303,63 @@ static void hook_presentList(id self, SEL _cmd, id list) {
   }
 }
 
+
+// ---------------------------------------------------------------------------------------- the "Modern UI" menu row
+
+#ifndef BK_VERSION
+#define BK_VERSION "dev"
+#endif
+
+// An extra last row in the stock menu: shows the version and lets the user switch the layer off without a file manager.
+// (Switching it on again = delete Documents/disable-modern-ui in the Files app; the README says so.)
+static void BKAskToTurnOff(UIViewController *presenter) {
+  UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"Modern UI"
+                                                                 message:BKL(@"Turn off the modern interface? The stock interface comes back after you quit and reopen Blinker Fluid. To turn it on again, delete the file disable-modern-ui in the app's folder (Files app).")
+                                                          preferredStyle:UIAlertControllerStyleAlert];
+  [alert addAction:[UIAlertAction actionWithTitle:BKL(@"Cancel") style:UIAlertActionStyleCancel handler:nil]];
+  [alert addAction:[UIAlertAction actionWithTitle:BKL(@"Turn off")
+                                            style:UIAlertActionStyleDestructive
+                                          handler:^(UIAlertAction *action) {
+                                            NSString *path = [BKDocumentsPath() stringByAppendingPathComponent:@"disable-modern-ui"];
+                                            [@"remove this file to turn the modern UI on again\n" writeToFile:path atomically:YES encoding:NSUTF8StringEncoding error:nil];
+                                            BKLog(@"the user turned the modern UI off from the menu");
+                                          }]];
+  [presenter presentViewController:alert animated:YES completion:nil];
+}
+
+static void BKAddModernUIRow(UINavigationController *nav) {
+  UIViewController *root = nav.viewControllers.firstObject;
+  NSMutableArray *titles = [root valueForKey:@"titles"];
+  if (![titles isKindOfClass:[NSMutableArray class]] || titles.count != 14) {
+    return;
+  }
+  NSMutableArray *subtitles = [root valueForKey:@"subtitles"];
+  NSMutableArray *images = [[root valueForKey:@"imageNames"] mutableCopy] ?: [NSMutableArray array];
+  NSMutableArray *rowImages = [[root valueForKey:@"rowImages"] mutableCopy] ?: [NSMutableArray array];
+  [titles addObject:@"Modern UI"];
+  [subtitles addObject:[NSString stringWithFormat:@"%s", BK_VERSION]];
+  while (images.count < 14) {
+    [images addObject:@""];
+  }
+  [images addObject:@"info.circle"];
+  while (rowImages.count < 14) {
+    [rowImages addObject:[NSNull null]];
+  }
+  [rowImages addObject:[NSNull null]];
+  [root setValue:images forKey:@"imageNames"];
+  [root setValue:rowImages forKey:@"rowImages"];
+  void (^original)(NSInteger) = [root valueForKey:@"onSelect"];
+  __weak UIViewController *weakNav = nav;
+  void (^wrapped)(NSInteger) = ^(NSInteger row) {
+    if (row == 14) {
+      BKAskToTurnOff(weakNav);
+    } else if (original) {
+      original(row);
+    }
+  };
+  [root setValue:wrapped forKey:@"onSelect"];
+}
+
 @implementation BKListStyle
 
 + (void)styleNavigationBar:(UINavigationBar *)bar {
@@ -335,7 +392,7 @@ static void hook_presentList(id self, SEL _cmd, id list) {
     BOOL compact = [[vc valueForKey:@"compactRows"] boolValue];
     NSArray *starts = [vc valueForKey:@"sectionStarts"];
     NSArray *titles = [vc valueForKey:@"titles"];
-    return compact && starts.count == 4 && titles.count == 14;
+    return compact && starts.count == 4 && titles.count >= 14;
   } @catch (NSException *exception) {
     return NO;
   }
@@ -361,6 +418,7 @@ static void hook_presentList(id self, SEL _cmd, id list) {
       [(BKMenuHeader *)header applyTheme];
     }
   }
+  BKAddModernUIRow(nav);
   BKMenuNavDelegate *navDelegate = [[BKMenuNavDelegate alloc] init];
   objc_setAssociatedObject(nav, kMenuNavDelegateKey, navDelegate, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
   nav.delegate = navDelegate;

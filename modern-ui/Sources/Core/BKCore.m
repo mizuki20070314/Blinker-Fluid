@@ -312,6 +312,9 @@ NSString *BKL(NSString *english) {
         @"Clear" : @"消去",
         @"Address" : @"アドレス",
         @"Blinker Fluid" : @"Blinker Fluid",
+        @"Turn off" : @"オフにする",
+        @"Turn off the modern interface? The stock interface comes back after you quit and reopen Blinker Fluid. To turn it on again, delete the file disable-modern-ui in the app's folder (Files app)." :
+            @"新しいインターフェースをオフにしますか？Blinker Fluid を終了して開き直すと元の画面に戻ります。もう一度オンにするには、アプリのフォルダ(ファイルアプリ)にある disable-modern-ui というファイルを削除してください。",
       },
     };
   });

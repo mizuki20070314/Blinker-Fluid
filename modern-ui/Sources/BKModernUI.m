@@ -20,7 +20,11 @@ __attribute__((constructor)) static void BKModernUIMain(void) {
     if (!BKGuardBeginLaunch()) {
       return;
     }
-    BKInstallHooks();
+    @try {
+      BKInstallHooks();
+    } @catch (NSException *exception) {
+      BKLog(@"installing the hooks threw: %@ - %@", exception.name, exception.reason);
+    }
     dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(8.0 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
       BKGuardMarkLaunchHealthy();
     });

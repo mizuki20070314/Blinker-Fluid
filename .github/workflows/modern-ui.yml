@@ -84,6 +84,11 @@ jobs:
           EXE="$APP/$(/usr/libexec/PlistBuddy -c 'Print :CFBundleExecutable' "$APP/Info.plist")"
           echo "--- otool -L (executable)"; otool -L "$EXE"
           echo "--- ldid -e (executable)"; ldid -e "$EXE"
+          echo "--- signature: original vs new executable"
+          rm -rf orig && mkdir orig && unzip -q -o base.ipa 'Payload/*.app/content_shell' -d orig
+          codesign -dvv orig/Payload/*.app/content_shell 2>&1 | grep -E 'Signature|CodeDirectory|Hash|Format|flags' || true
+          echo '   --- new:'
+          codesign -dvv "$EXE" 2>&1 | grep -E 'Signature|CodeDirectory|Hash|Format|flags' || true
           echo "--- otool -L (modern UI)"; otool -L "$APP/Frameworks/BlinkerModernUI.framework/BlinkerModernUI"
           echo "--- minos"; otool -l "$APP/Frameworks/BlinkerModernUI.framework/BlinkerModernUI" | grep -A4 -E "LC_BUILD_VERSION|LC_VERSION_MIN" | head -12
           shasum -a 256 dist/*.ipa | tee dist/SHA256SUMS.txt
