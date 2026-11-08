@@ -89,6 +89,11 @@ static NSHashTable<UIViewController *> *BKAllHosts(void) {
   objc_setAssociatedObject(host, kChromeKey, chrome, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
   [BKAllHosts() addObject:host];
   [chrome build];
+  // A problem in this layer shows up in the first moments after the first chrome exists; engine crashes while loading pages come
+  // later and must not count against it, so the launch is declared healthy a few seconds after the first install.
+  dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(3.0 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+    BKGuardMarkLaunchHealthy();
+  });
   BKLog(@"chrome: installed (tabs now %ld)", (long)[self openTabCountForHostClass:[host class]]);
   return YES;
 }

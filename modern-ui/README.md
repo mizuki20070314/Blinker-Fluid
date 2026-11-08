@@ -39,7 +39,7 @@ your installer of choice). A free‑certificate sideload strips the entitlements
 
 ### If something is wrong
 
-* **The app crashes right after start** – nothing to do: if the previous launch did not become healthy within 8 seconds the layer
+* **The app crashes right after start** – nothing to do: if the previous launch did not get through its first 3 seconds with the new screen up the layer
   stays off for one launch, and after two such launches it stays off until you delete `ModernUI-safe-mode.txt` (see below). One
   screen that keeps failing (address entry, tab grid, menu) falls back to the stock screen on its own.
 * **Turn it off by hand** – menu → **Modern UI** (last row), or create a file called `disable-modern-ui` in the app's folder. In
