@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 #import "BKListStyle.h"
+#import "BKChrome.h"
 #import "BKCore.h"
 #import "BKIcons.h"
 #import "BKSheet.h"
@@ -336,6 +337,26 @@ static void BKAskToTurnOff(UIViewController *presenter) {
   [presenter presentViewController:alert animated:YES completion:nil];
 }
 
+// A page that times the JavaScript engine, as a data: URL (so there is nothing to type on the device).  Run it once per engine tier
+// (Settings > JavaScript Engine) and compare the numbers: the JIT tiers only count if the total goes down.
+static NSString *BKSpeedTestURL(void) {
+  NSString *html =
+      @"<!doctype html><meta name=viewport content='width=device-width,initial-scale=1'><title>JavaScript speed</title>"
+      @"<body style='font:16px -apple-system,sans-serif;margin:16px'><h3>JavaScript speed test</h3><pre id=o>running ...</pre>"
+      @"<script>function fib(n){return n<2?n:fib(n-1)+fib(n-2)}"
+      @"function t(f){var a=performance.now();f();return Math.round(performance.now()-a)}"
+      @"setTimeout(function(){var r=[];"
+      @"r.push(['fib(27)',t(function(){fib(27)})]);"
+      @"r.push(['loop 10M',t(function(){var s=0;for(var i=0;i<1e7;i++){s=(s+i*3)|0}return s})]);"
+      @"r.push(['sort 200k',t(function(){var a=[];for(var i=0;i<2e5;i++)a.push((i*7919)%10007);a.sort(function(x,y){return x-y})})]);"
+      @"r.push(['string 100k',t(function(){var s='';for(var i=0;i<1e5;i++)s+=i;return s.length})]);"
+      @"var tot=r.reduce(function(a,b){return a+b[1]},0);"
+      @"document.getElementById('o').textContent=r.map(function(x){return x[0]+': '+x[1]+' ms'}).join('\\n')+'\\n\\nTOTAL: '+tot+' ms\\n(lower is faster)'},300)</script>";
+  NSMutableCharacterSet *allowed = [NSMutableCharacterSet alphanumericCharacterSet];
+  [allowed addCharactersInString:@"-._~"];
+  return [@"data:text/html," stringByAppendingString:[html stringByAddingPercentEncodingWithAllowedCharacters:allowed]];
+}
+
 static void BKAddModernUIRow(UINavigationController *nav) {
   UIViewController *root = nav.viewControllers.firstObject;
   NSMutableArray *titles = [root valueForKey:@"titles"];
@@ -345,23 +366,35 @@ static void BKAddModernUIRow(UINavigationController *nav) {
   NSMutableArray *subtitles = [root valueForKey:@"subtitles"];
   NSMutableArray *images = [[root valueForKey:@"imageNames"] mutableCopy] ?: [NSMutableArray array];
   NSMutableArray *rowImages = [[root valueForKey:@"rowImages"] mutableCopy] ?: [NSMutableArray array];
-  [titles addObject:@"Modern UI"];
-  [subtitles addObject:[NSString stringWithFormat:@"%s", BK_VERSION]];
   while (images.count < 14) {
     [images addObject:@""];
   }
-  [images addObject:@"info.circle"];
   while (rowImages.count < 14) {
     [rowImages addObject:[NSNull null]];
   }
+  // row 14: the version and the off switch; row 15: the speed test
+  [titles addObject:@"Modern UI"];
+  [subtitles addObject:[NSString stringWithFormat:@"%s", BK_VERSION]];
+  [images addObject:@"info.circle"];
+  [rowImages addObject:[NSNull null]];
+  [titles addObject:BKL(@"JavaScript Speed Test")];
+  [subtitles addObject:BKL(@"Opens a page that times the JavaScript engine")];
+  [images addObject:@"bolt.fill"];
   [rowImages addObject:[NSNull null]];
   [root setValue:images forKey:@"imageNames"];
   [root setValue:rowImages forKey:@"rowImages"];
   void (^original)(NSInteger) = [root valueForKey:@"onSelect"];
-  __weak UIViewController *weakNav = nav;
+  __weak UINavigationController *weakNav = nav;
   void (^wrapped)(NSInteger) = ^(NSInteger row) {
     if (row == 14) {
       BKAskToTurnOff(weakNav);
+    } else if (row == 15) {
+      UINavigationController *strongNav = weakNav;
+      UIViewController *host = strongNav.presentingViewController;
+      [strongNav dismissViewControllerAnimated:YES
+                                    completion:^{
+                                      [(id<BKStockHost>)host openUserInput:BKSpeedTestURL()];
+                                    }];
     } else if (original) {
       original(row);
     }

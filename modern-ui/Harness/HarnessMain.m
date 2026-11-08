@@ -253,6 +253,18 @@ extern NSArray<NSString *> *HarnessLog(void);
   return nil;
 }
 
+// Dismisses whatever is presented; a dismissal that arrives while a transition is still running is ignored by UIKit, so try again.
+- (void)dismissAll {
+  [_host dismissViewControllerAnimated:NO completion:nil];
+  __weak HarnessApp *weakSelf = self;
+  dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.4 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+    HarnessApp *strong = weakSelf;
+    if (strong && strong->_host.presentedViewController) {
+      [strong->_host dismissViewControllerAnimated:NO completion:nil];
+    }
+  });
+}
+
 - (UIViewController *)topPresented {
   UIViewController *top = _host;
   while (top.presentedViewController) {
@@ -340,15 +352,15 @@ extern NSArray<NSString *> *HarnessLog(void);
     [s->_host showTabSwitcher];
     [s check:@"the tab switcher is ours" ok:[NSStringFromClass([[s topPresented] class]) isEqualToString:@"BKTabGridViewController"] detail:NSStringFromClass([[s topPresented] class])];
   });
-  STEP(@"closed-tabs", 0.5, { [s->_host dismissViewControllerAnimated:NO completion:nil]; });
+  STEP(@"closed-tabs", 0.9, { [s dismissAll]; });
   STEP(@"menu", 1.3, {
     [s->_host showMainMenu];
     UIViewController *top = [s topPresented];
     [s check:@"the menu is a bottom sheet" ok:top.modalPresentationStyle == UIModalPresentationCustom && [top isKindOfClass:[UINavigationController class]] && ((UINavigationController *)top).navigationBarHidden detail:NSStringFromClass([top class])];
   });
-  STEP(@"closed-menu", 0.5, {
+  STEP(@"closed-menu", 0.9, {
     [s check:@"the menu is shown by a fresh navigation controller, not the stock popover one" ok:[s topPresented] != (UIViewController *)[(id)s->_host valueForKey:@"lastStockMenuNav"] detail:nil];
-    [s->_host dismissViewControllerAnimated:NO completion:nil];
+    [s dismissAll];
   });
   STEP(@"only-tab", 1.2, {
     [(id)s->_host setValue:@1 forKey:@"harnessTabCount"];
@@ -389,7 +401,7 @@ extern NSArray<NSString *> *HarnessLog(void);
     [list setValue:[NSIndexSet indexSetWithIndex:1] forKey:@"checkedRows"];
     [s->_host presentList:list];
   });
-  STEP(@"closed-list", 0.4, { [s->_host dismissViewControllerAnimated:NO completion:nil]; });
+  STEP(@"closed-list", 0.9, { [s dismissAll]; });
   STEP(@"start-again", 0.7, { [s->_host setURL:@"about:blank"]; });
 #undef STEP
   [self runSteps:steps index:0];
