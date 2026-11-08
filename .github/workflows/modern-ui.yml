@@ -8,7 +8,7 @@ name: Modern UI
 
 on:
   push:
-    branches: [modern-ui]
+    branches: [modern-ui, main]
     paths:
       - "modern-ui/**"
       - ".github/workflows/modern-ui.yml"

@@ -271,8 +271,9 @@ static NSHashTable<UIViewController *> *BKAllHosts(void) {
   ]];
   NSArray<NSLayoutConstraint *> *vertical = @[
     [content.topAnchor constraintEqualToAnchor:_topBar.bottomAnchor],
-    inset > 0 ? [content.bottomAnchor constraintEqualToAnchor:view.bottomAnchor constant:-inset]
-              : [content.bottomAnchor constraintEqualToAnchor:_bottomBar.topAnchor],
+    // (with no bottom bar - landscape - the page reaches the true bottom edge, like the stock layout does)
+    (inset > 0 || compact) ? [content.bottomAnchor constraintEqualToAnchor:view.bottomAnchor constant:-inset]
+                           : [content.bottomAnchor constraintEqualToAnchor:_bottomBar.topAnchor],
   ];
   [NSLayoutConstraint activateConstraints:own];
   [NSLayoutConstraint activateConstraints:vertical];
