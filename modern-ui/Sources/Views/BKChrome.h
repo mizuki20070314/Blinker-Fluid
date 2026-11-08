@@ -39,6 +39,7 @@ NS_ASSUME_NONNULL_BEGIN
 // Undoes a half-finished install: removes our views and puts the stock toolbar back.
 + (void)rollbackHost:(UIViewController<BKStockHost> *)host;
 + (NSInteger)openTabCountForHostClass:(Class)hostClass;
++ (void)refreshAllTabCounts;   // every tab's chrome re-reads the number of open tabs
 
 @property(nonatomic, weak, readonly, nullable) UIViewController<BKStockHost> *host;
 @property(nonatomic, strong, readonly) BKTopBar *topBar;

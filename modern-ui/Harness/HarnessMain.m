@@ -222,7 +222,7 @@ extern NSArray<NSString *> *HarnessLog(void);
     [s->_host setURL:@"https://example.com/docs/index.html"];
     [s->_host.backButton setEnabled:YES];
     [s checkLayout:@"page"];
-    [s check:@"the start page is hidden on a real page" ok:[s findSubview:@"BKStartPageView" in:[s->_host contentView]].hidden detail:nil];
+    [s check:@"the start page is hidden on a real page" ok:((UIView *)[s findSubview:@"BKStartPageView" in:[s->_host contentView]]).hidden detail:nil];
   });
   STEP(@"loading", 1.2, { [s->_host setPageLoading:YES]; });
   STEP(@"omnibox", 0.9, {
@@ -252,7 +252,7 @@ extern NSArray<NSString *> *HarnessLog(void);
   });
   STEP(@"fullscreen", 0.7, {
     // the same sequence as ShellPlatformDelegate::ToggleFullscreenModeForTab (entering)
-    UIViewController *h = s->_host;
+    UIViewController<HarnessHost> *h = s->_host;
     UIView *root = h.view, *content = [h contentView];
     [(UIView *)[(id)h valueForKey:@"toolbarBackgroundView"] setHidden:YES];
     [NSLayoutConstraint deactivateConstraints:[(id)h valueForKey:@"fullscreenConstraints"] ?: @[]];

@@ -110,15 +110,7 @@ static const void *kStartPageKey = &kStartPageKey;
 // ------------------------------------------------------------------------------------------------------------ helpers
 
 static void BKRefreshAllTabCounts(void) {
-  if (!gHostClass) {
-    return;
-  }
-  for (UIWindow *window in UIApplication.sharedApplication.windows) {
-    UIViewController *root = window.rootViewController;
-    if ([root isKindOfClass:gHostClass]) {
-      [[BKChrome chromeForHost:root] refreshTabCount];
-    }
-  }
+  [BKChrome refreshAllTabCounts];
 }
 
 // ---------------------------------------------------------------------------------------------------------- the hooks

@@ -69,6 +69,12 @@ static NSHashTable<UIViewController *> *BKAllHosts(void) {
   return MAX(count, 1);
 }
 
++ (void)refreshAllTabCounts {
+  for (UIViewController *controller in BKAllHosts().allObjects) {
+    [[self chromeForHost:controller] refreshTabCount];
+  }
+}
+
 + (BOOL)installOnHost:(UIViewController<BKStockHost> *)host {
   if ([self chromeForHost:host]) {
     return YES;
@@ -81,8 +87,8 @@ static NSHashTable<UIViewController *> *BKAllHosts(void) {
   BKChrome *chrome = [[BKChrome alloc] init];
   chrome->_host = host;
   objc_setAssociatedObject(host, kChromeKey, chrome, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-  [chrome build];
   [BKAllHosts() addObject:host];
+  [chrome build];
   BKLog(@"chrome: installed (tabs now %ld)", (long)[self openTabCountForHostClass:[host class]]);
   return YES;
 }
@@ -281,7 +287,10 @@ static NSHashTable<UIViewController *> *BKAllHosts(void) {
   if (!_installed) {
     return;
   }
-  if ([self isCompact] != _compact || [BKSettings toolbarAtBottom] != _atBottom) {
+  // (the bottom position only applies when there is room for it - compare what -applyLayout would decide, or landscape with the
+  //  "bottom" setting would re-layout on every pass)
+  const BOOL compact = [self isCompact];
+  if (compact != _compact || ([BKSettings toolbarAtBottom] && !compact) != _atBottom) {
     [self applyLayout];
   }
 }
