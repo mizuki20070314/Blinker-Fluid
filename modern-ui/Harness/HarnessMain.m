@@ -358,8 +358,33 @@ extern NSArray<NSString *> *HarnessLog(void);
     UIViewController *top = [s topPresented];
     [s check:@"the menu is a bottom sheet" ok:top.modalPresentationStyle == UIModalPresentationCustom && [top isKindOfClass:[UINavigationController class]] && ((UINavigationController *)top).navigationBarHidden detail:NSStringFromClass([top class])];
   });
-  STEP(@"closed-menu", 0.9, {
-    [s check:@"the menu is shown by a fresh navigation controller, not the stock popover one" ok:[s topPresented] != (UIViewController *)[(id)s->_host valueForKey:@"lastStockMenuNav"] detail:nil];
+  STEP(@"closed-menu", 1.4, {
+    UIViewController *top = [s topPresented];
+    [s check:@"the menu is shown by a fresh navigation controller, not the stock popover one" ok:top != (UIViewController *)[(id)s->_host valueForKey:@"lastStockMenuNav"] detail:nil];
+    // the two rows we add at the end of the menu: the version / off switch and the JavaScript speed test
+    id menuList = [top isKindOfClass:[UINavigationController class]] ? ((UINavigationController *)top).viewControllers.firstObject : nil;
+    NSArray *titles = [menuList valueForKey:@"titles"];
+    BOOL rows = titles.count == 16 && [titles[14] isEqualToString:@"Modern UI"] && [titles[15] isEqualToString:BKL(@"JavaScript Speed Test")];
+    [s check:@"the menu ends with the Modern UI and JavaScript Speed Test rows" ok:rows detail:[NSString stringWithFormat:@"%lu rows, last: %@", (unsigned long)titles.count, titles.lastObject]];
+    NSArray *images = [menuList valueForKey:@"imageNames"];
+    [s check:@"... each with an icon" ok:images.count == 16 && [images[15] isEqualToString:@"bolt.fill"] detail:nil];
+    // choose the speed test like a finger would: the sheet goes away, then the page is opened in the current tab
+    void (^onSelect)(NSInteger) = [menuList valueForKey:@"onSelect"];
+    if (onSelect) {
+      onSelect(15);
+    }
+    [s check:@"the menu has a row handler" ok:onSelect != nil detail:nil];
+  });
+  STEP(@"closed-speed-test", 1.0, {
+    NSString *opened = nil;
+    for (NSString *line in HarnessLog()) {
+      if ([line hasPrefix:@"open data:text/html,"]) {
+        opened = line;
+      }
+    }
+    [s check:@"the speed-test row opens a data: page" ok:opened.length > 400 detail:[NSString stringWithFormat:@"%lu characters", (unsigned long)opened.length]];
+    [s check:@"... the page is a complete test (all four timings and the total)" ok:[opened containsString:@"fib%2827%29"] && [opened containsString:@"TOTAL"] && [opened containsString:@"sort%20200k"] && [opened containsString:@"string%20100k"] && [opened containsString:@"loop%2010M"] detail:nil];
+    [s check:@"... and the menu went away" ok:![[s topPresented] isKindOfClass:[UINavigationController class]] detail:NSStringFromClass([[s topPresented] class])];
     [s dismissAll];
   });
   STEP(@"only-tab", 1.2, {

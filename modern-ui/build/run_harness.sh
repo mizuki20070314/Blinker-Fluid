@@ -62,3 +62,10 @@ if [ "$(grep -c '^PASS' "$OUT"/imetest-checks.txt)" -lt 18 ]; then
   echo "the input-method test did not run completely"
   exit 1
 fi
+# A step that threw would leave no FAIL line behind, so count what passed in the layout variants too.
+for variant in light dark bottom private ja landscape; do
+  if [ -f "$OUT/$variant-checks.txt" ] && [ "$(grep -c '^PASS' "$OUT/$variant-checks.txt")" -lt 28 ]; then
+    echo "the $variant run did not complete all of its checks"
+    exit 1
+  fi
+done

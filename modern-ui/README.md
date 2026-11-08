@@ -14,8 +14,9 @@ drawn in code), which re‑skins the stock UI classes through the Objective‑C 
 | Landscape | one bar on top (back, forward, address, tabs, menu) so the page gets the screen |
 | Loading | thin progress line; the reload icon spins while a page loads |
 | Address entry | full‑screen, suggestions from bookmarks and history on the device; the search provider's suggestions only when opened from the start page (the stock privacy rules, see below) |
-| Tabs | grid of page thumbnails, ✕ on every card, swipe a card away to close, long‑press and drag to reorder, big **+** |
-| Menu | bottom sheet with quick actions (new tab, bookmarks, downloads, share) above the stock list; the list screens (settings, bookmarks, history …) get the same look |
+| Tabs | grid of page thumbnails, ✕ on every card, swipe a card away to close, long‑press and drag to reorder, big **+**; closing the only tab opens a fresh one in its place |
+| Menu | bottom sheet with quick actions (new tab, bookmarks, downloads, share) above the stock list; the list screens (settings, bookmarks, history …) get the same look. Two rows are added at the end: **Modern UI** (version, off switch) and **JavaScript Speed Test** |
+| Japanese input | the engine's text fields now tell the keyboard when a composition (typed, not yet confirmed) exists – see below |
 | New tab page | logo, search field, favourites (the stock `BlinkShortcuts`), recent sites |
 | Gestures | swipe in from the left / right screen edge = back / forward |
 | Themes | light / dark (iOS 12 has no system dark mode, so **Settings → Appearance** decides there), violet accent and tint in a private session |
@@ -26,16 +27,44 @@ new UI only decides how they look and where the buttons are.
 
 ## Install
 
-CI builds the IPA: **Actions → Modern UI → latest run → Artifacts → `BlinkerFluid-ModernUI-ios12-ipa`** (the `.ipa` inside the zip).
-It is the released **v.0.3.1 iOS 12 IPA** (SHA‑256 `e26dc439…5822eb`, checked by CI) with the framework added:
+CI builds two IPAs: **Actions → Modern UI → latest run → Artifacts** (the `.ipa` inside each zip):
+
+| Artifact | Built from | Bundle identifier |
+|---|---|---|
+| `BlinkerFluid-ModernUI-ios12-stable-ipa` | the released **v.0.3.1 iOS 12 IPA** (SHA‑256 `e26dc439…5822eb`, checked by CI) | `com.nodesclock.blinkerfluid.ios12` (unchanged, so installing over the old app keeps tabs, bookmarks and settings) |
+| `BlinkerFluid-ModernUI-ios12-jit-ipa` | the released **v.0.3.1 iOS 12 JIT IPA** (SHA‑256 `557dcf9c…e595e4`, checked by CI) | `com.nodesclock.blinkerfluid.ios12.jit` (a separate app with its own data; both can be installed) |
+
+Both get the same change:
 
 * the app executable gets one more `LC_LOAD_DYLIB`; it is signed again with `ldid` using its **original entitlements**
   (`increased-memory-limit`, `extended-virtual-addressing`, `get-task-allow`);
-* the bundle identifier is unchanged (`com.nodesclock.blinkerfluid.ios12`), so installing over the old app keeps tabs, bookmarks
-  and settings; `CFBundleVersion` becomes `0.3.1.<build>`.
+* `CFBundleVersion` becomes `0.3.1.<build>`.
 
 Install it the way you installed the original IPA (jailbreak: unzip, copy `content_shell.app` to `/Applications`, `uicache`, or
 your installer of choice). A free‑certificate sideload strips the entitlements and does not work for the stock app either.
+
+### JavaScript engine speed
+
+The *Settings → JavaScript Engine* list is not a list of engines to install; it picks how far V8 may compile JavaScript:
+
+| Tier | What V8 does | Needs JIT |
+|---|---|---|
+| 1 Interpreter | bytecode interpreter only | no |
+| 2 Baseline | + Sparkplug (fast first compile) | yes |
+| 3 Balanced | + Maglev (mid‑tier optimiser) and the regexp compiler | yes |
+| 4 Full | + TurboFan (the default of the JIT build) | yes |
+| 5 Full + Wasm | + WebAssembly compilers | yes |
+
+Only the **JIT build** may generate machine code, and only while its process counts as "debugged" (the engine checks the
+code‑signing flag `CS_DEBUGGED`). The app can set that flag itself only through Dopamine's `libjailbreak` (iOS 15+), and
+TrollStore offers "Open with JIT"; a way to do it on iOS 12 is not known here. Without the flag the engine falls back to the
+interpreter whatever tier is chosen, so on iOS 12 the tier matters only if the JIT build really gets JIT. The upstream issues about
+the JIT build on iOS 12.5 devices (iPad mini 2: #21, iPad Air 1: #27) report crashes.
+
+To find out on your device, use the menu's **JavaScript Speed Test**: it opens a page that times four small workloads and prints
+a TOTAL (lower is faster). Run it once per tier (quit and reopen the app after changing the tier); if the numbers do not drop,
+JIT is not active and the stable build is the better choice. On a 1 GB iPod touch, *Baseline* or *Balanced* are the tiers to
+try first – *Full* compiles the most and needs the most memory.
 
 ### If something is wrong
 
@@ -45,7 +74,10 @@ your installer of choice). A free‑certificate sideload strips the entitlements
 * **Turn it off by hand** – menu → **Modern UI** (last row), or create a file called `disable-modern-ui` in the app's folder. In
   the Files app: *On My iPod → Blinker Fluid*; duplicate `ModernUI.log` and rename the copy.
 * **Turn it on again** – delete `disable-modern-ui` / `ModernUI-safe-mode.txt` there, or create `enable-modern-ui` (resets the guard).
+* **Japanese input misbehaves** – create a file called `disable-ime-fix` in the same folder (the input hooks stay off at the next
+  launch; the rest of the new UI is unaffected) and send `ModernUI.log`.
 * **Report a problem** – send `ModernUI.log` from the same folder. It lists which hooks were installed and why anything was skipped.
+  While typing in a web page it also records what the keyboard asked for (`ime:` lines – only lengths and counts, never the text).
 
 ## How it works
 
@@ -66,6 +98,17 @@ released IPA ──► + BlinkerModernUI.framework ──► executable loads it
 * The engine talks to the UI through a few stock selectors (`setURL:`, `setPageLoading:`, `-backButton`'s `setEnabled:` …); the
   hooks keep those working, with the new views behind them. Stock views that are replaced stay alive but off‑screen, so every
   stock code path that still touches them is harmless.
+* **Japanese / Chinese / Korean input** (`Sources/Hooks/BKIME.m`, contract `BKContractIME.inc`). The engine's text input view
+  (`RenderWidgetUIView`, a `UITextInput`) always answered `-markedTextRange` with nil, i.e. "nothing is being composed". The iOS
+  keyboard relies on that answer: it then treats every key as the first one (only one kana fits before the text has to be
+  confirmed) and the confirm key as a plain Return (a line break). The hooks answer it properly from what the engine already
+  tracks (`-hasMarkedText`, `-markedText`) and give UIKit consistent positions inside the composition; everything else still goes
+  to the engine. The simulator harness tests the logic against a replica of the view (`imetest`); the real keyboard needs a real
+  device.
+* **Closing the only tab.** The stock code cannot close the last tab. The tab grid opens a new tab first and then closes the old
+  one, so the result is the usual "one fresh tab".
+* **The menu on iOS 12.** A stock navigation controller that was ever asked for its popover controller keeps presenting as a
+  popover, so the menu sheet is shown by a new navigation controller that has never been one.
 * **Privacy rules of the stock UI are kept.** Search suggestions are requested only from the new‑tab page, never while a proxy
   (Tor) is configured, never in a private session, and only if *Search Suggestions* is on; site icons are fetched only for the
   favourites the user chose, and never while a proxy is configured. History and bookmarks are read locally.
