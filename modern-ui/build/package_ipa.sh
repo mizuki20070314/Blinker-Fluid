@@ -36,5 +36,5 @@ BASE_VERSION="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' "$APP/Info.p
 mkdir -p "$(dirname "$OUT")"
 rm -f "$OUT"
 ABS_OUT="$(cd "$(dirname "$OUT")" && pwd)/$(basename "$OUT")"
-( cd "$WORK/ipa" && zip -qry "$ABS_OUT" Payload )
+( cd "$WORK/ipa" && zip -qry9 "$ABS_OUT" Payload )
 echo "wrote $OUT ($(du -h "$OUT" | cut -f1))"

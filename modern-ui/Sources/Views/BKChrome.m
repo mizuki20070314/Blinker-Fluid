@@ -46,6 +46,7 @@ static NSHashTable<UIViewController *> *BKAllHosts(void) {
   BKOmniboxView *_omnibox;
   BOOL _installed;
   NSString *_urlString;
+  BOOL _chromeHidden;
 }
 
 @synthesize host = _host;
@@ -205,16 +206,29 @@ static NSHashTable<UIViewController *> *BKAllHosts(void) {
   if (!content) {
     return;
   }
-  const BOOL bottom = [BKSettings toolbarAtBottom];
   const BOOL compact = [self isCompact];
+  const BOOL bottom = [BKSettings toolbarAtBottom] && !compact;   // landscape has no room for a second bar
   _atBottom = bottom;
   _compact = compact;
-  const CGFloat pillRow = compact ? 46 : 56;
-  const CGFloat buttonsHeight = compact ? 40 : 49;
+  const CGFloat pillRow = compact ? 44 : 56;
+  const CGFloat buttonsHeight = compact ? 0 : 49;
   _topBar.contentHeight = bottom ? 0 : pillRow;
   _bottomBar.buttonsHeight = buttonsHeight;
   _bottomBar.pillRowHeight = bottom ? pillRow : 0;
 
+  // Landscape: back / forward / tabs / menu sit beside the address pill in the top bar and the bottom bar goes away.
+  NSArray<UIView *> *leading = @[ _bottomBar.backButton, _bottomBar.forwardButton ];
+  NSArray<UIView *> *trailing = @[ _bottomBar.tabsButton, _bottomBar.menuButton ];
+  UIView *buttonParent = compact ? (UIView *)_topBar : (UIView *)_bottomBar;
+  for (UIView *button in [leading arrayByAddingObjectsFromArray:trailing]) {
+    if (button.superview != buttonParent) {
+      [button removeFromSuperview];
+      [buttonParent addSubview:button];
+    }
+  }
+  _topBar.leadingButtons = compact ? leading : nil;
+  _topBar.trailingButtons = compact ? trailing : nil;
+  _bottomBar.hidden = compact || _chromeHidden;
   UIView *parent = bottom ? (UIView *)_bottomBar : (UIView *)_topBar;
   if (_pill.superview != parent) {
     [_pill removeFromSuperview];
@@ -268,8 +282,9 @@ static NSHashTable<UIViewController *> *BKAllHosts(void) {
 }
 
 - (void)setChromeHidden:(BOOL)hidden {
+  _chromeHidden = hidden;
   _topBar.hidden = hidden;
-  _bottomBar.hidden = hidden;
+  _bottomBar.hidden = hidden || _compact;
   _progress.hidden = hidden;
 }
 

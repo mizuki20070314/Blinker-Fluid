@@ -388,11 +388,31 @@ static NSString *BKDisplayHost(NSString *host) {
   const CGFloat width = self.bounds.size.width;
   const CGFloat height = self.bounds.size.height;
   UIView *pill = self.pillView;
-  if (pill.superview == self && _contentHeight > 0) {
-    const CGFloat pillHeight = MIN(40, _contentHeight - 12);
-    CGFloat x = MAX(12, safe.left + 8);
-    CGFloat w = width - x - MAX(12, safe.right + 8);
-    pill.frame = CGRectMake(x, safe.top + (_contentHeight - pillHeight) / 2, w, pillHeight);
+  if (_contentHeight > 0) {
+    const CGFloat buttonWidth = 40;
+    CGFloat x = MAX(8, safe.left + 4);
+    CGFloat xr = width - MAX(8, safe.right + 4);
+    BOOL hasButtons = NO;
+    for (UIView *button in _leadingButtons) {
+      if (button.superview == self) {
+        button.frame = CGRectMake(x, safe.top, buttonWidth, _contentHeight);
+        x += buttonWidth;
+        hasButtons = YES;
+      }
+    }
+    for (UIView *button in [_trailingButtons reverseObjectEnumerator]) {
+      if (button.superview == self) {
+        xr -= buttonWidth;
+        button.frame = CGRectMake(xr, safe.top, buttonWidth, _contentHeight);
+        hasButtons = YES;
+      }
+    }
+    if (pill.superview == self) {
+      const CGFloat pillHeight = MIN(hasButtons ? 34 : 40, _contentHeight - (hasButtons ? 8 : 12));
+      const CGFloat left = hasButtons ? x + 2 : MAX(12, safe.left + 8);
+      const CGFloat right = hasButtons ? xr - 2 : width - MAX(12, safe.right + 8);
+      pill.frame = CGRectMake(left, safe.top + (_contentHeight - pillHeight) / 2, MAX(right - left, 40), pillHeight);
+    }
   }
   _hairline.frame = CGRectMake(0, height - kHairline, width, kHairline);
   [self bringSubviewToFront:_hairline];
@@ -472,7 +492,9 @@ static NSString *BKDisplayHost(NSString *host) {
   const CGFloat rowWidth = width - safe.left - safe.right;
   const CGFloat cell = rowWidth / (CGFloat)_buttons.count;
   for (NSUInteger i = 0; i < _buttons.count; i++) {
-    _buttons[i].frame = CGRectMake(safe.left + cell * i, y, cell, _buttonsHeight);
+    if (_buttons[i].superview == self) {   // (in landscape most of them live in the top bar)
+      _buttons[i].frame = CGRectMake(safe.left + cell * i, y, cell, _buttonsHeight);
+    }
   }
   _hairline.frame = CGRectMake(0, 0, width, kHairline);
   [self bringSubviewToFront:_hairline];

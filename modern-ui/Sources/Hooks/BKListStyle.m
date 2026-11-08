@@ -50,6 +50,10 @@ static UIColor *BKTileColorForIcon(BKIcon icon) {
 
 // ------------------------------------------------------------------------------------------------- quick actions
 
+// The buttons carry the menu row as their tag, so their children need tags that can never be a row number
+// (viewWithTag: also returns the receiver itself).
+static const NSInteger kTileTag = 9101, kGlyphTag = 9102, kCaptionTag = 9103;
+
 @interface BKMenuHeader : UIView
 - (instancetype)initWithList:(UIViewController *)list;
 @end
@@ -86,17 +90,17 @@ static UIColor *BKTileColorForIcon(BKIcon icon) {
       UIControl *button = [[UIControl alloc] init];
       button.tag = row;
       UIView *tile = [[UIView alloc] init];
-      tile.tag = 1;
+      tile.tag = kTileTag;
       tile.userInteractionEnabled = NO;
       tile.layer.cornerRadius = 16;
       [button addSubview:tile];
       UIImageView *glyph = [[UIImageView alloc] initWithImage:[BKIcons image:(BKIcon)[item[@"icon"] integerValue] size:26]];
-      glyph.tag = 2;
+      glyph.tag = kGlyphTag;
       glyph.contentMode = UIViewContentModeCenter;
       glyph.userInteractionEnabled = NO;
       [button addSubview:glyph];
       UILabel *caption = [[UILabel alloc] init];
-      caption.tag = 3;
+      caption.tag = kCaptionTag;
       caption.text = titles[row];
       caption.textAlignment = NSTextAlignmentCenter;
       caption.font = [BKTheme font:11 weight:UIFontWeightMedium];
@@ -118,9 +122,9 @@ static UIColor *BKTileColorForIcon(BKIcon icon) {
 - (void)applyTheme {
   _grabber.backgroundColor = [BKTheme tertiaryText];
   for (UIControl *button in _buttons) {
-    [button viewWithTag:1].backgroundColor = [BKTheme cellBackground];
-    [button viewWithTag:2].tintColor = [BKTheme accent];
-    ((UILabel *)[button viewWithTag:3]).textColor = [BKTheme secondaryText];
+    [button viewWithTag:kTileTag].backgroundColor = [BKTheme cellBackground];
+    [button viewWithTag:kGlyphTag].tintColor = [BKTheme accent];
+    ((UILabel *)[button viewWithTag:kCaptionTag]).textColor = [BKTheme secondaryText];
   }
 }
 
@@ -147,9 +151,9 @@ static UIColor *BKTileColorForIcon(BKIcon icon) {
     UIControl *button = _buttons[i];
     button.frame = CGRectMake(side + i * (cell + gap), 22, cell, 92);
     CGRect tile = CGRectMake(0, 0, cell, 62);
-    [button viewWithTag:1].frame = tile;
-    [button viewWithTag:2].frame = tile;
-    [button viewWithTag:3].frame = CGRectMake(0, 68, cell, 16);
+    [button viewWithTag:kTileTag].frame = tile;
+    [button viewWithTag:kGlyphTag].frame = tile;
+    [button viewWithTag:kCaptionTag].frame = CGRectMake(0, 68, cell, 16);
   }
 }
 
@@ -266,6 +270,39 @@ static void hook_stylableWillAppear(id self, SEL _cmd, BOOL animated) {
   }
 }
 
+// Hides the navigation bar on the menu (its root) and shows it on the screens pushed from it (Settings, Bookmarks ...).
+@interface BKMenuNavDelegate : NSObject <UINavigationControllerDelegate>
+@end
+@implementation BKMenuNavDelegate
+- (void)navigationController:(UINavigationController *)nav willShowViewController:(UIViewController *)viewController animated:(BOOL)animated {
+  [nav setNavigationBarHidden:(viewController == nav.viewControllers.firstObject) animated:animated];
+}
+@end
+
+static const void *kMenuNavDelegateKey = &kMenuNavDelegateKey;
+
+// The stock -presentList: pushes onto the menu and gives the pushed screen a back button made from an SF Symbol - which does
+// not exist on iOS 12, so the button comes out empty.  Give it our own chevron.
+static void (*orig_presentList)(id, SEL, id);
+static void hook_presentList(id self, SEL _cmd, id list) {
+  orig_presentList(self, _cmd, list);
+  @try {
+    UIViewController *presented = [(UIViewController *)self presentedViewController];
+    if ([presented isKindOfClass:[UINavigationController class]]) {
+      UIViewController *top = ((UINavigationController *)presented).topViewController;
+      UIBarButtonItem *left = top.navigationItem.leftBarButtonItem;
+      if (left && !left.image && !left.title && left.action == NSSelectorFromString(@"backTapped")) {
+        top.navigationItem.leftBarButtonItem = [[UIBarButtonItem alloc] initWithImage:[BKIcons image:BKIconBack size:24]
+                                                                                style:UIBarButtonItemStylePlain
+                                                                               target:left.target
+                                                                               action:left.action];
+      }
+    }
+  } @catch (NSException *exception) {
+    BKLog(@"back button fix-up failed: %@", exception);
+  }
+}
+
 @implementation BKListStyle
 
 + (void)styleNavigationBar:(UINavigationBar *)bar {
@@ -310,16 +347,25 @@ static void hook_stylableWillAppear(id self, SEL _cmd, BOOL animated) {
   if ([root isKindOfClass:[UITableViewController class]]) {
     UITableView *table = ((UITableViewController *)root).tableView;
     table.backgroundColor = [BKTheme groupedBackground];
-    table.contentInset = UIEdgeInsetsZero;
+    // The sheet does not reach the status bar: no automatic top inset (it would push the grabber and quick actions down).
+    CGFloat home = 0;
+    if (@available(iOS 11.0, *)) {
+      table.contentInsetAdjustmentBehavior = UIScrollViewContentInsetAdjustmentNever;
+      home = UIApplication.sharedApplication.keyWindow.safeAreaInsets.bottom;
+    }
+    table.contentInset = UIEdgeInsetsMake(0, 0, home, 0);
+    table.scrollIndicatorInsets = UIEdgeInsetsMake(0, 0, home, 0);
     table.tableFooterView = [[UIView alloc] initWithFrame:CGRectMake(0, 0, 1, 12)];
     UIView *header = table.tableHeaderView;
     if ([header isKindOfClass:[BKMenuHeader class]]) {
       [(BKMenuHeader *)header applyTheme];
     }
   }
+  BKMenuNavDelegate *navDelegate = [[BKMenuNavDelegate alloc] init];
+  objc_setAssociatedObject(nav, kMenuNavDelegateKey, navDelegate, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+  nav.delegate = navDelegate;
   nav.navigationBarHidden = YES;
-  CGFloat screen = UIScreen.mainScreen.bounds.size.height;
-  nav.preferredContentSize = CGSizeMake(0, floor(MIN(screen * 0.76, 640)));
+  nav.preferredContentSize = CGSizeMake(0, 640);  // "as tall as allowed": BKSheet limits it to a share of the screen
   [BKSheetTransition applyToController:nav];
   nav.view.backgroundColor = [BKTheme groupedBackground];
 }
@@ -332,6 +378,10 @@ static void hook_stylableWillAppear(id self, SEL _cmd, BOOL animated) {
     BKHookInstance(gListClass, @selector(tableView:cellForRowAtIndexPath:), "@@:@@", (IMP)hook_listCell, (IMP *)&orig_listCell);
     // not implemented by the stock class: add (class_addMethod through BKHookInstance is not possible without an existing method)
     class_addMethod(gListClass, @selector(tableView:willDisplayHeaderView:forSection:), (IMP)hook_listWillDisplayHeader, "v@:@@q");
+  }
+  Class hostClass = objc_getClass("ContentShellWindowDelegate");
+  if (hostClass) {
+    BKHookInstance(hostClass, NSSelectorFromString(@"presentList:"), "v@:@", (IMP)hook_presentList, (IMP *)&orig_presentList);
   }
   Class editor = objc_getClass("BlinkBookmarkEditorVC");
   if (editor) {

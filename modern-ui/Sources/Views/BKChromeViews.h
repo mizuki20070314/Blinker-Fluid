@@ -46,6 +46,9 @@ typedef NS_ENUM(NSInteger, BKSecurityState) { BKSecurityNone = 0, BKSecuritySecu
 
 @interface BKTopBar : UIView
 @property(nonatomic) CGFloat contentHeight;      // below the status bar; 0 = only the status-bar strip
+// Landscape: the toolbar buttons move up next to the pill (they must be subviews of this bar to be laid out).
+@property(nonatomic, copy, nullable) NSArray<UIView *> *leadingButtons;
+@property(nonatomic, copy, nullable) NSArray<UIView *> *trailingButtons;
 @property(nonatomic, weak, nullable) UIView *pillView;
 - (void)applyTheme;
 @end

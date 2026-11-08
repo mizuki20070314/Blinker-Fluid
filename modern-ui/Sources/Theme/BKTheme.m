@@ -55,6 +55,9 @@ static UIColor *BKRGB(CGFloat r, CGFloat g, CGFloat b) {
 }
 
 + (UIColor *)chromeBackground {
+  if ([self isPrivateSession]) {
+    return [self isDark] ? BKRGB(32, 27, 42) : BKRGB(243, 239, 250);
+  }
   return [self isDark] ? BKRGB(26, 26, 30) : BKRGB(248, 248, 250);
 }
 
@@ -63,6 +66,9 @@ static UIColor *BKRGB(CGFloat r, CGFloat g, CGFloat b) {
 }
 
 + (UIColor *)pillBackground {
+  if ([self isPrivateSession]) {
+    return [self isDark] ? BKRGB(52, 45, 68) : BKRGB(229, 222, 243);
+  }
   return [self isDark] ? BKRGB(44, 44, 50) : BKRGB(233, 233, 238);
 }
 

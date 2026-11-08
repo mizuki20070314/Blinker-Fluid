@@ -22,6 +22,7 @@
   UILabel *_monogram;
   UILabel *_label;
   BOOL _hasImage;
+  BOOL _lowRes;
 }
 
 - (instancetype)initWithTitle:(NSString *)title url:(NSString *)url {
@@ -64,6 +65,8 @@
 
 - (void)setIconImage:(UIImage *)image {
   _hasImage = image != nil;
+  _lowRes = image && image.size.width * image.scale < 60;   // a 16 or 32 px icon looks smudged when stretched
+  _icon.contentMode = _lowRes ? UIViewContentModeCenter : UIViewContentModeScaleAspectFit;
   _icon.image = image;
   _icon.hidden = !_hasImage;
   _monogram.hidden = _hasImage;
@@ -387,44 +390,44 @@
   const CGFloat side = MAX(16, self.safeAreaInsets.left + 8);
   const CGFloat column = MIN(width - 2 * side, 520);
   const CGFloat left = (width - column) / 2;
-  CGFloat y = landscape ? 14 : 34;
+  CGFloat y = landscape ? 12 : 20;
 
-  const CGFloat logoSize = landscape ? 44 : 68;
+  const CGFloat logoSize = landscape ? 40 : 60;
   _logo.frame = CGRectMake((width - logoSize) / 2, y, logoSize, logoSize);
   y += logoSize + 8;
   _title.hidden = landscape;
   if (!landscape) {
-    _title.frame = CGRectMake(left, y, column, 28);
-    y += 28 + 16;
+    _title.frame = CGRectMake(left, y, column, 26);
+    y += 26 + 12;
   } else {
     y += 4;
   }
 
-  _search.frame = CGRectMake(left, y, column, 48);
-  _searchIcon.frame = CGRectMake(10, 0, 30, 48);
-  _searchLabel.frame = CGRectMake(44, 0, column - 56, 48);
-  y += 48 + 18;
+  _search.frame = CGRectMake(left, y, column, 46);
+  _searchIcon.frame = CGRectMake(10, 0, 30, 46);
+  _searchLabel.frame = CGRectMake(44, 0, column - 56, 46);
+  y += 46 + 14;
 
   if (!_privateCard.hidden) {
-    _privateCard.frame = CGRectMake(left, y, column, 76);
-    _privateIcon.frame = CGRectMake(10, 0, 52, 76);
-    _privateTitle.frame = CGRectMake(66, 14, column - 78, 20);
-    _privateText.frame = CGRectMake(66, 36, column - 78, 34);
-    y += 76 + 18;
+    _privateCard.frame = CGRectMake(left, y, column, 64);
+    _privateIcon.frame = CGRectMake(10, 0, 52, 64);
+    _privateTitle.frame = CGRectMake(66, 10, column - 78, 20);
+    _privateText.frame = CGRectMake(66, 32, column - 78, 28);
+    y += 64 + 14;
   }
 
   _favoritesHeader.frame = CGRectMake(left + 4, y, column, 18);
-  y += 18 + 10;
+  y += 18 + 8;
   const NSInteger perRow = landscape ? 8 : 4;
   const CGFloat slot = column / (CGFloat)perRow;
   NSInteger index = 0;
   for (BKTile *tile in _tiles) {
     NSInteger r = index / perRow, c = index % perRow;
-    tile.frame = CGRectMake(left + slot * c, y + r * 94, slot, 84);
+    tile.frame = CGRectMake(left + slot * c, y + r * 90, slot, 84);
     index++;
   }
   NSInteger rowsUsed = _tiles.count ? (NSInteger)((_tiles.count + perRow - 1) / perRow) : 0;
-  y += rowsUsed * 94 + 6;
+  y += rowsUsed * 90 + 6;
 
   const BOOL showRecent = _rows.count > 0 && ![BKTheme isPrivateSession];
   _recentHeader.hidden = !showRecent;

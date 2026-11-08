@@ -18,7 +18,8 @@ static const void *kTransitionKey = &kTransitionKey;
   UIEdgeInsets safe = self.containerView.safeAreaInsets;
   CGFloat maxHeight = bounds.size.height - safe.top - 16;
   CGFloat wanted = self.presentedViewController.preferredContentSize.height;
-  CGFloat height = wanted > 0 ? MIN(wanted, maxHeight) : MIN(bounds.size.height * 0.62, maxHeight);
+  CGFloat share = bounds.size.width > bounds.size.height ? 0.9 : 0.78;   // never taller than this share of the screen
+  CGFloat height = wanted > 0 ? MIN(MIN(wanted, bounds.size.height * share), maxHeight) : MIN(bounds.size.height * 0.62, maxHeight);
   CGFloat width = MIN(bounds.size.width, 520);
   return CGRectMake((bounds.size.width - width) / 2, bounds.size.height - height, width, height);
 }
