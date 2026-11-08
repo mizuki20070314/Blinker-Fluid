@@ -56,6 +56,7 @@ static const NSInteger kTileTag = 9101, kGlyphTag = 9102, kCaptionTag = 9103;
 
 @interface BKMenuHeader : UIView
 - (instancetype)initWithList:(UIViewController *)list;
+@property(nonatomic, readonly) NSUInteger actionCount;
 @end
 
 @implementation BKMenuHeader {
@@ -66,25 +67,27 @@ static const NSInteger kTileTag = 9101, kGlyphTag = 9102, kCaptionTag = 9103;
 }
 
 - (instancetype)initWithList:(UIViewController *)list {
-  if ((self = [super initWithFrame:CGRectMake(0, 0, 320, 132)])) {
+  if ((self = [super initWithFrame:CGRectMake(0, 0, 320, 116)])) {
     _list = list;
     self.backgroundColor = UIColor.clearColor;
     _grabber = [[UIView alloc] init];
     _grabber.layer.cornerRadius = 2;
     [self addSubview:_grabber];
     NSArray<NSString *> *titles = [list valueForKey:@"titles"];
-    // Rows of the stock menu (see showMainMenu): 2 = New Tab, 6 = Bookmarks, 7 = Downloads, 11 = Share Link.
+    NSArray<NSString *> *symbols = [list valueForKey:@"imageNames"];
+    // Rows of the stock menu (see showMainMenu): 2 = New Tab, 6 = Bookmarks, 7 = Downloads, 11 = Share Link.  A row is only
+    // offered as a quick action if its stock symbol name is the expected one (so a changed menu can never be mis-mapped).
     NSArray<NSDictionary *> *spec = @[
-      @{@"row" : @2, @"icon" : @(BKIconPlus)},
-      @{@"row" : @6, @"icon" : @(BKIconBookmark)},
-      @{@"row" : @7, @"icon" : @(BKIconDownload)},
-      @{@"row" : @11, @"icon" : @(BKIconShare)},
+      @{@"row" : @2, @"icon" : @(BKIconPlus), @"symbol" : @"plus"},
+      @{@"row" : @6, @"icon" : @(BKIconBookmark), @"symbol" : @"bookmark"},
+      @{@"row" : @7, @"icon" : @(BKIconDownload), @"symbol" : @"arrow.down.circle"},
+      @{@"row" : @11, @"icon" : @(BKIconShare), @"symbol" : @"square.and.arrow.up"},
     ];
     NSMutableArray *buttons = [NSMutableArray array];
     NSMutableArray *rows = [NSMutableArray array];
     for (NSDictionary *item in spec) {
       NSInteger row = [item[@"row"] integerValue];
-      if (row >= (NSInteger)titles.count) {
+      if (row >= (NSInteger)titles.count || row >= (NSInteger)symbols.count || ![symbols[row] isEqualToString:item[@"symbol"]]) {
         continue;
       }
       UIControl *button = [[UIControl alloc] init];
@@ -117,6 +120,10 @@ static const NSInteger kTileTag = 9101, kGlyphTag = 9102, kCaptionTag = 9103;
     [self applyTheme];
   }
   return self;
+}
+
+- (NSUInteger)actionCount {
+  return _buttons.count;
 }
 
 - (void)applyTheme {
@@ -184,8 +191,10 @@ static void hook_listViewDidLoad(id self, SEL _cmd) {
     list.tableView.tableFooterView = [[UIView alloc] initWithFrame:CGRectMake(0, 0, 1, 12)];
     if ([BKListStyle isMainMenuList:list]) {
       BKMenuHeader *header = [[BKMenuHeader alloc] initWithList:list];
-      header.frame = CGRectMake(0, 0, list.tableView.bounds.size.width, 132);
-      list.tableView.tableHeaderView = header;
+      header.frame = CGRectMake(0, 0, list.tableView.bounds.size.width, 116);
+      if (header.actionCount >= 2) {
+        list.tableView.tableHeaderView = header;
+      }
       list.tableView.separatorInset = UIEdgeInsetsMake(0, 58, 0, 0);
     }
   } @catch (NSException *exception) {

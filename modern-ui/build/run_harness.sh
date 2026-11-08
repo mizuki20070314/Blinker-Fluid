@@ -27,7 +27,7 @@ xcrun simctl boot "$UDID" 2>/dev/null || true
 xcrun simctl bootstatus "$UDID" -b >/dev/null
 xcrun simctl install "$UDID" "$APP"
 
-for variant in ${BK_VARIANTS:-light dark bottom private ja landscape}; do
+for variant in ${BK_VARIANTS:-light dark bottom private ja landscape guardtest}; do
   echo "== variant $variant"
   xcrun simctl launch "$UDID" jp.tank.bk.harness -bk-variant "$variant" >/dev/null
   CONTAINER="$(xcrun simctl get_app_container "$UDID" jp.tank.bk.harness data)"
@@ -45,4 +45,16 @@ cp -R "$CONTAINER/Documents/shots/." "$OUT/"
 if [ -f "$CONTAINER/Documents/ModernUI.log" ]; then
   cp "$CONTAINER/Documents/ModernUI.log" "$OUT/ModernUI.log"
 fi
-ls -la "$OUT" | head -80
+ls -la "$OUT" | head -100
+
+# The checks the harness made about the layout, the stock hand-over (fullscreen, keyboard) and the crash guard.
+echo "== checks"
+cat "$OUT"/*-checks.txt
+if grep -q "^FAIL" "$OUT"/*-checks.txt; then
+  echo "some checks FAILED"
+  exit 1
+fi
+if [ "$(grep -c '^PASS' "$OUT"/guardtest-checks.txt)" -lt 10 ]; then
+  echo "the guard test did not run completely"
+  exit 1
+fi

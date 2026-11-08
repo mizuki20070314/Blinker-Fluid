@@ -2,6 +2,7 @@
 // each one (plus a contact sheet).  Variants (launch argument  -bk-variant <name>):
 //   light | dark | bottom | private | ja | landscape
 #import <UIKit/UIKit.h>
+#import <objc/message.h>
 #import "BKChrome.h"
 #import "BKCore.h"
 #import "BKHooks.h"
@@ -30,6 +31,7 @@ extern NSArray<NSString *> *HarnessLog(void);
   UIViewController<HarnessHost> *_host;
   NSMutableArray<NSString *> *_names;
   NSMutableArray<UIImage *> *_images;
+  NSMutableArray<NSString *> *_checks;
   CGSize _size;
 }
 
@@ -74,8 +76,29 @@ extern NSArray<NSString *> *HarnessLog(void);
   [UIImagePNGRepresentation(sheet) writeToFile:[[self shotsDirectory] stringByAppendingPathComponent:[_variant stringByAppendingString:@"-sheet.png"]] atomically:YES];
 }
 
+- (void)check:(NSString *)name ok:(BOOL)ok detail:(NSString *)detail {
+  [_checks addObject:[NSString stringWithFormat:@"%@ %@%@", ok ? @"PASS" : @"FAIL", name, detail.length ? [@" - " stringByAppendingString:detail] : @""]];
+}
+
+- (BOOL)near:(CGFloat)a to:(CGFloat)b {
+  return fabs(a - b) < 1.0;
+}
+
+// The content view must sit exactly between the bars (or fill the screen when the chrome is hidden).
+- (void)checkLayout:(NSString *)label {
+  [_host.view layoutIfNeeded];
+  BKChrome *chrome = [BKChrome chromeForHost:_host];
+  UIView *content = [_host contentView];
+  CGRect c = content.frame;
+  CGFloat top = chrome.topBar.hidden ? 0 : CGRectGetMaxY(chrome.topBar.frame);
+  CGFloat bottom = chrome.bottomBar.hidden ? _host.view.bounds.size.height : CGRectGetMinY(chrome.bottomBar.frame);
+  [self check:[label stringByAppendingString:@": content between the bars"] ok:[self near:c.origin.y to:top] && [self near:CGRectGetMaxY(c) to:bottom] && [self near:c.size.width to:_host.view.bounds.size.width]
+       detail:[NSString stringWithFormat:@"content %@ expected y %.0f..%.0f", NSStringFromCGRect(c), top, bottom]];
+}
+
 - (void)finish {
   [self writeContactSheet];
+  [[_checks componentsJoinedByString:@"\n"] writeToFile:[[self shotsDirectory] stringByAppendingPathComponent:[_variant stringByAppendingString:@"-checks.txt"]] atomically:YES encoding:NSUTF8StringEncoding error:nil];
   NSString *log = [HarnessLog() componentsJoinedByString:@"\n"];
   [log writeToFile:[[self shotsDirectory] stringByAppendingPathComponent:[_variant stringByAppendingString:@"-log.txt"]] atomically:YES encoding:NSUTF8StringEncoding error:nil];
   [@"done" writeToFile:[[self shotsDirectory] stringByAppendingPathComponent:[_variant stringByAppendingString:@".done"]] atomically:YES encoding:NSUTF8StringEncoding error:nil];
@@ -102,6 +125,11 @@ extern NSArray<NSString *> *HarnessLog(void);
   _variant = [[NSUserDefaults standardUserDefaults] stringForKey:@"bk-variant"] ?: @"light";
   _names = [NSMutableArray array];
   _images = [NSMutableArray array];
+  _checks = [NSMutableArray array];
+  if ([_variant isEqualToString:@"guardtest"]) {
+    [self runGuardTest];
+    return YES;
+  }
   [self seedDefaults];
   [BKTheme cachePrivateSessionAtLaunch];
   BKInstallHooks();
@@ -122,6 +150,38 @@ extern NSArray<NSString *> *HarnessLog(void);
 
   dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.8 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{ [self runScenario]; });
   return YES;
+}
+
+// The crash guard, driven the way consecutive launches would drive it.
+- (void)runGuardTest {
+  NSFileManager *fm = [NSFileManager defaultManager];
+  NSString *docs = BKDocumentsPath(), *caches = BKSupportPath();
+  for (NSString *name in @[ @"disable-modern-ui", @"enable-modern-ui", @"ModernUI-safe-mode.txt" ]) {
+    [fm removeItemAtPath:[docs stringByAppendingPathComponent:name] error:nil];
+  }
+  for (NSString *name in @[ @"guard.plist", @"launch.marker" ]) {
+    [fm removeItemAtPath:[caches stringByAppendingPathComponent:name] error:nil];
+  }
+  [self check:@"launch A (clean) turns the layer on" ok:BKGuardBeginLaunch() detail:nil];
+  [self check:@"launch B after a launch that never became healthy: stock UI once" ok:!BKGuardBeginLaunch() detail:nil];
+  [self check:@"launch C tries again" ok:BKGuardBeginLaunch() detail:nil];
+  [self check:@"launch D after a second failed launch: off for good" ok:!BKGuardBeginLaunch() detail:nil];
+  [self check:@"the safe-mode file explains it" ok:[fm fileExistsAtPath:[docs stringByAppendingPathComponent:@"ModernUI-safe-mode.txt"]] detail:nil];
+  [self check:@"launch E stays off" ok:!BKGuardBeginLaunch() detail:nil];
+  [@"" writeToFile:[docs stringByAppendingPathComponent:@"enable-modern-ui"] atomically:YES encoding:NSUTF8StringEncoding error:nil];
+  [self check:@"enable-modern-ui resets the guard" ok:BKGuardBeginLaunch() detail:nil];
+  BKGuardMarkLaunchHealthy();
+  [self check:@"a healthy launch clears the marker" ok:![fm fileExistsAtPath:[caches stringByAppendingPathComponent:@"launch.marker"]] detail:nil];
+  [self check:@"... and the next launch is normal again" ok:BKGuardBeginLaunch() detail:nil];
+  [@"" writeToFile:[docs stringByAppendingPathComponent:@"disable-modern-ui"] atomically:YES encoding:NSUTF8StringEncoding error:nil];
+  [self check:@"disable-modern-ui switches the layer off" ok:!BKGuardBeginLaunch() detail:nil];
+  for (NSString *name in @[ @"disable-modern-ui", @"enable-modern-ui", @"ModernUI-safe-mode.txt" ]) {
+    [fm removeItemAtPath:[docs stringByAppendingPathComponent:name] error:nil];
+  }
+  for (NSString *name in @[ @"guard.plist", @"launch.marker" ]) {
+    [fm removeItemAtPath:[caches stringByAppendingPathComponent:name] error:nil];
+  }
+  [self finish];
 }
 
 - (id)findSubview:(NSString *)className in:(UIView *)root {
@@ -149,15 +209,26 @@ extern NSArray<NSString *> *HarnessLog(void);
   __weak HarnessApp *weakSelf = self;
   NSMutableArray<NSDictionary *> *steps = [NSMutableArray array];
 #define STEP(label, wait, ...) [steps addObject:@{@"name" : label, @"wait" : @(wait), @"do" : ^{ __strong HarnessApp *s = weakSelf; (void)s; __VA_ARGS__ }}]
-  STEP(@"start", 0.8, );
+  STEP(@"start", 0.8, {
+    [s checkLayout:@"start"];
+    BKChrome *chrome = [BKChrome chromeForHost:s->_host];
+    [s check:@"chrome installed" ok:chrome != nil detail:nil];
+    [s check:@"engine glue gets our back button" ok:[NSStringFromClass([[s->_host backButton] class]) isEqualToString:@"BKBarButton"] detail:NSStringFromClass([[s->_host backButton] class])];
+    [s check:@"fullscreen code gets the stand-in view" ok:[NSStringFromClass([[(id)s->_host valueForKey:@"toolbarBackgroundView"] class]) isEqualToString:@"BKToggleProxy"] detail:nil];
+    [s check:@"the start page is ours" ok:[s findSubview:@"BKStartPageView" in:[s->_host contentView]] != nil detail:nil];
+    [s check:@"the stock toolbar is off screen" ok:[(UIView *)[s->_host valueForKey:@"toolbarContentView"] window] == nil detail:nil];
+  });
   STEP(@"page", 0.6, {
     [s->_host setURL:@"https://example.com/docs/index.html"];
     [s->_host.backButton setEnabled:YES];
+    [s checkLayout:@"page"];
+    [s check:@"the start page is hidden on a real page" ok:[s findSubview:@"BKStartPageView" in:[s->_host contentView]].hidden detail:nil];
   });
   STEP(@"loading", 1.2, { [s->_host setPageLoading:YES]; });
   STEP(@"omnibox", 0.9, {
     [s->_host setPageLoading:NO];
     [[BKChrome chromeForHost:s->_host] showOmnibox];
+    [s check:@"the omnibox opens over the page" ok:[s findSubview:@"BKOmniboxView" in:s->_host.view] != nil detail:nil];
   });
   STEP(@"typing", 0.7, {
     UIView *box = [s findSubview:@"BKOmniboxView" in:s->_host.view];
@@ -165,10 +236,60 @@ extern NSArray<NSString *> *HarnessLog(void);
     field.text = @"git";
     [field sendActionsForControlEvents:UIControlEventEditingChanged];
   });
-  STEP(@"page-again", 0.6, { [[BKChrome chromeForHost:s->_host] hideOmnibox]; });
-  STEP(@"tabs", 1.3, { [s->_host showTabSwitcher]; });
+  STEP(@"page-again", 0.6, {
+    [[BKChrome chromeForHost:s->_host] hideOmnibox];
+  });
+  STEP(@"keyboard", 0.6, {
+    [s check:@"the omnibox is gone after Cancel" ok:[s findSubview:@"BKOmniboxView" in:s->_host.view] == nil detail:nil];
+    ((void (*)(id, SEL, CGFloat))objc_msgSend)(s->_host, NSSelectorFromString(@"setKeyboardViewportInset:"), 250);
+    [s->_host.view layoutIfNeeded];
+    CGRect c = [s->_host contentView].frame;
+    [s check:@"keyboard: the page ends at the keyboard" ok:[s near:CGRectGetMaxY(c) to:s->_host.view.bounds.size.height - 250] detail:NSStringFromCGRect(c)];
+  });
+  STEP(@"keyboard-off", 0.5, {
+    ((void (*)(id, SEL, CGFloat))objc_msgSend)(s->_host, NSSelectorFromString(@"setKeyboardViewportInset:"), 0);
+    [s checkLayout:@"keyboard gone"];
+  });
+  STEP(@"fullscreen", 0.7, {
+    // the same sequence as ShellPlatformDelegate::ToggleFullscreenModeForTab (entering)
+    UIViewController *h = s->_host;
+    UIView *root = h.view, *content = [h contentView];
+    [(UIView *)[(id)h valueForKey:@"toolbarBackgroundView"] setHidden:YES];
+    [NSLayoutConstraint deactivateConstraints:[(id)h valueForKey:@"fullscreenConstraints"] ?: @[]];
+    [NSLayoutConstraint deactivateConstraints:[(id)h valueForKey:@"topPosConstraints"]];
+    [NSLayoutConstraint deactivateConstraints:[(id)h valueForKey:@"bottomPosConstraints"]];
+    [NSLayoutConstraint deactivateConstraints:[(id)h valueForKey:@"contentHorizontalConstraints"]];
+    NSArray *pins = @[ [content.leadingAnchor constraintEqualToAnchor:root.leadingAnchor], [content.trailingAnchor constraintEqualToAnchor:root.trailingAnchor],
+                       [content.topAnchor constraintEqualToAnchor:root.topAnchor], [content.bottomAnchor constraintEqualToAnchor:root.bottomAnchor] ];
+    [(id)h setValue:pins forKey:@"fullscreenConstraints"];
+    [NSLayoutConstraint activateConstraints:pins];
+    [root layoutIfNeeded];
+    BKChrome *chrome = [BKChrome chromeForHost:h];
+    [s check:@"fullscreen: all bars hidden" ok:chrome.topBar.hidden && chrome.bottomBar.hidden && chrome.progress.hidden detail:nil];
+    [s check:@"fullscreen: the page fills the screen" ok:CGRectEqualToRect(content.frame, root.bounds) detail:NSStringFromCGRect(content.frame)];
+  });
+  STEP(@"fullscreen-off", 0.7, {
+    // ... and leaving it
+    UIViewController *h = s->_host;
+    [(UIView *)[(id)h valueForKey:@"toolbarBackgroundView"] setHidden:NO];
+    [NSLayoutConstraint deactivateConstraints:[(id)h valueForKey:@"fullscreenConstraints"] ?: @[]];
+    [(id)h setValue:nil forKey:@"fullscreenConstraints"];
+    [NSLayoutConstraint activateConstraints:[(id)h valueForKey:@"contentHorizontalConstraints"]];
+    [(id)h applyToolbarPosition];
+    [s checkLayout:@"after fullscreen"];
+    BKChrome *chrome = [BKChrome chromeForHost:h];
+    [s check:@"after fullscreen: bars are back (bottom bar hidden only in landscape)" ok:!chrome.topBar.hidden && (chrome.bottomBar.hidden == [s->_variant isEqualToString:@"landscape"]) detail:nil];
+  });
+  STEP(@"tabs", 1.3, {
+    [s->_host showTabSwitcher];
+    [s check:@"the tab switcher is ours" ok:[NSStringFromClass([[s topPresented] class]) isEqualToString:@"BKTabGridViewController"] detail:NSStringFromClass([[s topPresented] class])];
+  });
   STEP(@"closed-tabs", 0.5, { [s->_host dismissViewControllerAnimated:NO completion:nil]; });
-  STEP(@"menu", 1.3, { [s->_host showMainMenu]; });
+  STEP(@"menu", 1.3, {
+    [s->_host showMainMenu];
+    UIViewController *top = [s topPresented];
+    [s check:@"the menu is a bottom sheet" ok:top.modalPresentationStyle == UIModalPresentationCustom && [top isKindOfClass:[UINavigationController class]] && ((UINavigationController *)top).navigationBarHidden detail:NSStringFromClass([top class])];
+  });
   STEP(@"closed-menu", 0.5, { [s->_host dismissViewControllerAnimated:NO completion:nil]; });
   STEP(@"list", 1.2, {
     Class listClass = NSClassFromString(@"BlinkListVC");
