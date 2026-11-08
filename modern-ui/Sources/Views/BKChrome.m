@@ -45,6 +45,7 @@ static NSHashTable<UIViewController *> *BKAllHosts(void) {
   BOOL _atBottom;
   BKOmniboxView *_omnibox;
   BOOL _installed;
+  NSString *_urlString;
 }
 
 @synthesize host = _host;
@@ -151,7 +152,7 @@ static NSHashTable<UIViewController *> *BKAllHosts(void) {
   _bottomBar.forwardButton.enabled = stockForward.enabled;
   [_bottomBar.backButton addTarget:host action:@selector(back) forControlEvents:UIControlEventTouchUpInside];
   [_bottomBar.forwardButton addTarget:host action:@selector(forward) forControlEvents:UIControlEventTouchUpInside];
-  [_bottomBar.newTabButton addTarget:host action:@selector(openNewTab) forControlEvents:UIControlEventTouchUpInside];
+  [_bottomBar.addTabButton addTarget:host action:@selector(openNewTab) forControlEvents:UIControlEventTouchUpInside];
   [_bottomBar.tabsButton addTarget:host action:@selector(showTabSwitcher) forControlEvents:UIControlEventTouchUpInside];
   [_bottomBar.menuButton addTarget:host action:@selector(showMainMenu) forControlEvents:UIControlEventTouchUpInside];
   [_pill.reloadButton addTarget:self action:@selector(reloadTapped) forControlEvents:UIControlEventTouchUpInside];

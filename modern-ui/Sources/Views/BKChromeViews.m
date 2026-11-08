@@ -415,15 +415,15 @@ static NSString *BKDisplayHost(NSString *host) {
     _buttonsHeight = 49;
     _backButton = [[BKBarButton alloc] initWithIcon:BKIconBack iconSize:24];
     _forwardButton = [[BKBarButton alloc] initWithIcon:BKIconForward iconSize:24];
-    _newTabButton = [[BKBarButton alloc] initWithIcon:BKIconPlus iconSize:24];
+    _addTabButton = [[BKBarButton alloc] initWithIcon:BKIconPlus iconSize:24];
     _tabsButton = [[BKTabsButton alloc] initWithIcon:BKIconTabs iconSize:25];
     _menuButton = [[BKBarButton alloc] initWithIcon:BKIconMenu iconSize:24];
     _backButton.accessibilityLabel = BKL(@"Back");
     _forwardButton.accessibilityLabel = BKL(@"Forward");
-    _newTabButton.accessibilityLabel = BKL(@"New Tab");
+    _addTabButton.accessibilityLabel = BKL(@"New Tab");
     _tabsButton.accessibilityLabel = BKL(@"Tabs");
     _menuButton.accessibilityLabel = BKL(@"Menu");
-    _buttons = @[ _backButton, _forwardButton, _newTabButton, _tabsButton, _menuButton ];
+    _buttons = @[ _backButton, _forwardButton, _addTabButton, _tabsButton, _menuButton ];
     for (BKBarButton *button in _buttons) {
       [self addSubview:button];
     }
