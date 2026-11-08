@@ -53,7 +53,7 @@ typedef NS_ENUM(NSInteger, BKSecurityState) { BKSecurityNone = 0, BKSecuritySecu
 @interface BKBottomBar : UIView
 @property(nonatomic, strong, readonly) BKBarButton *backButton;
 @property(nonatomic, strong, readonly) BKBarButton *forwardButton;
-@property(nonatomic, strong, readonly) BKBarButton *newTabButton;
+@property(nonatomic, strong, readonly) BKBarButton *addTabButton;
 @property(nonatomic, strong, readonly) BKTabsButton *tabsButton;
 @property(nonatomic, strong, readonly) BKBarButton *menuButton;
 @property(nonatomic) CGFloat buttonsHeight;      // height of the icon row (above the safe-area inset)
