@@ -1,0 +1,113 @@
+name: Modern UI
+
+# Builds the modern browser UI (modern-ui/) and puts it into the released Blinker Fluid IPA.
+#   package : checks that the released binary still matches what the hooks expect, builds BlinkerModernUI.framework for iOS 12+,
+#             adds it to a copy of the released IPA and verifies the result.  -> artifact "BlinkerFluid-ModernUI-ios12-ipa"
+#   screens : runs the UI on an iOS simulator (in a 320x568 window, like an iPod touch) and saves pictures of every screen.
+#             -> artifact "modern-ui-screens"
+
+on:
+  push:
+    branches: [modern-ui]
+    paths:
+      - "modern-ui/**"
+      - ".github/workflows/modern-ui.yml"
+  workflow_dispatch:
+    inputs:
+      base_url:
+        description: "IPA to start from (default: Blinker Fluid v.0.3.1, the iOS 12 build)"
+        required: false
+        default: ""
+      base_sha256:
+        description: "SHA-256 of that IPA (must be given together with base_url)"
+        required: false
+        default: ""
+
+concurrency:
+  group: modern-ui-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  BASE_URL: ${{ inputs.base_url || 'https://github.com/Nodesclock/Blinker-Fluid/releases/download/v.0.3.1/iOS.12.11.Blinker.Fluid.v.0.3.1.ipa' }}
+  BASE_SHA256: ${{ inputs.base_sha256 || 'e26dc439b2b97170cd86b23685cf3d46658484d3207d5c9d8090cbf9365822eb' }}
+
+jobs:
+  package:
+    runs-on: macos-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Machine
+        run: |
+          sw_vers
+          uname -m
+          echo "cpus: $(sysctl -n hw.ncpu), memory: $(( $(sysctl -n hw.memsize) / 1048576 )) MiB"
+          df -h / | tail -1
+          xcodebuild -version
+          xcrun --sdk iphoneos --show-sdk-version
+
+      - name: Fetch the released IPA
+        run: |
+          curl -fL --retry 3 -o base.ipa "$BASE_URL"
+          echo "$BASE_SHA256  base.ipa" | shasum -a 256 -c -
+          ls -l base.ipa
+
+      - name: Contract - does the released binary match what the hooks expect?
+        run: |
+          unzip -p base.ipa 'Payload/*.app/Frameworks/content_shell_framework.framework/content_shell_framework' > fw.bin
+          python3 modern-ui/tools/objc_dump.py fw.bin objc.json
+          python3 modern-ui/tools/check_contract.py modern-ui/Sources/Hooks/BKContract.inc objc.json
+          rm -f fw.bin
+
+      - name: Install ldid
+        run: brew install ldid
+
+      - name: Build BlinkerModernUI.framework (iOS 12, arm64)
+        env:
+          BK_VERSION: 0.3.1-ui.${{ github.run_number }}
+        run: modern-ui/build/build_device.sh build/device
+
+      - name: Put it into the IPA
+        run: modern-ui/build/package_ipa.sh base.ipa build/device/BlinkerModernUI.framework dist/BlinkerFluid-ModernUI-ios12.ipa "${{ github.run_number }}"
+
+      - name: Verify the IPA
+        run: python3 modern-ui/tools/verify_ipa.py dist/BlinkerFluid-ModernUI-ios12.ipa base.ipa
+
+      - name: Details of the signed binaries
+        run: |
+          rm -rf check && mkdir check && unzip -q dist/BlinkerFluid-ModernUI-ios12.ipa -d check
+          APP="$(echo check/Payload/*.app)"
+          EXE="$APP/$(/usr/libexec/PlistBuddy -c 'Print :CFBundleExecutable' "$APP/Info.plist")"
+          echo "--- otool -L (executable)"; otool -L "$EXE"
+          echo "--- ldid -e (executable)"; ldid -e "$EXE"
+          echo "--- otool -L (modern UI)"; otool -L "$APP/Frameworks/BlinkerModernUI.framework/BlinkerModernUI"
+          echo "--- minos"; otool -l "$APP/Frameworks/BlinkerModernUI.framework/BlinkerModernUI" | grep -A4 -E "LC_BUILD_VERSION|LC_VERSION_MIN" | head -12
+          shasum -a 256 dist/*.ipa | tee dist/SHA256SUMS.txt
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: BlinkerFluid-ModernUI-ios12-ipa
+          path: dist/
+          if-no-files-found: error
+
+  screens:
+    runs-on: macos-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build the simulator test app
+        run: modern-ui/build/build_harness.sh build/harness src/content/shell/browser/shell_platform_delegate_ios.mm
+
+      - name: Run it and take the pictures
+        run: modern-ui/build/run_harness.sh build/harness/Harness.app screens
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: modern-ui-screens
+          path: screens/

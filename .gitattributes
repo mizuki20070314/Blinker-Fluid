@@ -1,0 +1,5 @@
+modern-ui/** text eol=lf
+.github/** text eol=lf
+*.sh text eol=lf
+*.py text eol=lf
+*.inc text eol=lf
