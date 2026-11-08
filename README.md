@@ -21,6 +21,11 @@
   <strong>Experimental browser.</strong> Expect bugs and crashes.
 </p>
 
+> [!NOTE]
+> **This fork adds a modern browser interface** (address bar, toolbar, tab grid, menu sheet, new-tab page, light/dark) that is built
+> as a small separate framework and added to the released IPA - the engine is untouched. See [`modern-ui/`](modern-ui/README.md).
+> The IPA is built by the **Modern UI** workflow (Actions → latest run → Artifacts).
+
 ## About
 
 Blinker Fluid is an experimental privacy-focused browser that ports Chromium's **Blink** rendering engine and **V8** JavaScript engine to iOS, allowing websites to run without relying on Apple's built-in **WebKit** engine.
