@@ -16,7 +16,7 @@ drawn in code), which re‑skins the stock UI classes through the Objective‑C 
 | Address entry | full‑screen, suggestions from bookmarks and history on the device; the search provider's suggestions only when opened from the start page (the stock privacy rules, see below) |
 | Tabs | grid of page thumbnails, ✕ on every card, swipe a card away to close, long‑press and drag to reorder, big **+**; closing the only tab opens a fresh one in its place |
 | Menu | bottom sheet with quick actions (new tab, bookmarks, downloads, share) above the stock list; the list screens (settings, bookmarks, history …) get the same look. Two rows are added at the end: **Modern UI** (version, off switch) and **JavaScript Speed Test** |
-| Japanese input | the engine's text fields now tell the keyboard when a composition (typed, not yet confirmed) exists – see below |
+| Japanese input | the engine's text fields now tell the keyboard when a composition (typed, not yet confirmed) exists, and the Return key reaches the page as a real Enter key press (search boxes, chat fields, forms) – see below |
 | New tab page | logo, search field, favourites (the stock `BlinkShortcuts`), recent sites |
 | Gestures | swipe in from the left / right screen edge = back / forward |
 | Themes | light / dark (iOS 12 has no system dark mode, so **Settings → Appearance** decides there), violet accent and tint in a private session |
@@ -86,6 +86,9 @@ changing the tier); if the numbers do not drop, JIT is not active and the stable
 * **Turn it on again** – delete `disable-modern-ui` / `ModernUI-safe-mode.txt` there, or create `enable-modern-ui` (resets the guard).
 * **Japanese input misbehaves** – create a file called `disable-ime-fix` in the same folder (the input hooks stay off at the next
   launch; the rest of the new UI is unaffected) and send `ModernUI.log`.
+* **The Return key misbehaves** – create `disable-return-fix` in the same folder: the Return key goes back to typing a line break
+  (the Japanese input fix stays). The app writes this file by itself if it ended twice right after a Return key press; delete
+  it to try again.
 * **Report a problem** – send `ModernUI.log` from the same folder. It lists which hooks were installed and why anything was skipped.
   While typing in a web page it also records what the keyboard asked for (`ime:` lines – only lengths and counts, never the text).
 
@@ -115,6 +118,18 @@ released IPA ──► + BlinkerModernUI.framework ──► executable loads it
   tracks (`-hasMarkedText`, `-markedText`) and give UIKit consistent positions inside the composition; everything else still goes
   to the engine. The simulator harness tests the logic against a replica of the view (`imetest`); the real keyboard needs a real
   device.
+* **The Return key** (`BKIME.m`, contract `BKContractReturnKey.inc`). The software keyboard does not send a key press for
+  Return, it sends the text `"\n"` (`-insertText:`), and the engine commits that text: a text area gets a line break, but the page
+  never sees an Enter key – no `keydown` / `keypress`, so a search box or a "send on Enter" field does nothing, and a one-line
+  field is not submitted. A hardware keyboard on iOS 17.4+ goes through `-handleKeyEntry:withCompletionHandler:`, which builds a
+  real key event from a BrowserEngineKit `BEKeyEntry` and sends it to the page (keydown + keypress, then keyup). BrowserEngineKit
+  does not exist below iOS 17.4, but that method only reads `state`, `timestamp` and `key.keyCode / characters / modifierFlags` of
+  its argument and has no system text-input delegate to ask on iOS 12, so the hook for `-insertText:@"\n"` hands it a small
+  stand-in with those properties (Down = 1, Up = 2, checked against the SDK header in CI). Not used while a composition is on
+  screen (the confirm key only confirms), nor where the system has its own text-input delegate (iOS 17.4+). A marker file written
+  before the key press and removed a few seconds later (two leftovers in a row switch the fix off) keeps a crash in the engine's
+  key handling from repeating on every press. The simulator harness checks the calls the hook makes; whether the page then gets
+  the Enter needs a real device.
 * **Closing the only tab.** The stock code cannot close the last tab. The tab grid opens a new tab first and then closes the old
   one, so the result is the usual "one fresh tab".
 * **The menu on iOS 12.** A stock navigation controller that was ever asked for its popover controller keeps presenting as a

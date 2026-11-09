@@ -15,4 +15,15 @@ NS_ASSUME_NONNULL_BEGIN
 // Documents/disable-ime-fix exists.
 void BKInstallIMEHooks(void);
 
+// ---- the Return key (see BKIME.m)
+// Documents/disable-return-fix switches only this part off.  Also used by the simulator harness:
+// whether the Return key is currently turned into an Enter key press,
+BOOL BKIMEReturnKeyEnabled(void);
+// the launch-time check of the "an Enter key press was still in progress" marker (two such launches in a row switch the fix off),
+void BKIMEReturnKeyCheckLastLaunch(void);
+// and two switches the harness sets: pretend the system has no BrowserEngineKit key path (the simulator is far newer than iOS 12),
+// and how long after a Return key press the app counts it as survived.
+extern BOOL BKIMEAssumeLegacySystem;
+extern NSTimeInterval BKIMEReturnKeyHealthyDelay;
+
 NS_ASSUME_NONNULL_END

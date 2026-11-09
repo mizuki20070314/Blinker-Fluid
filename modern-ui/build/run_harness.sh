@@ -58,7 +58,7 @@ if [ "$(grep -c '^PASS' "$OUT"/guardtest-checks.txt)" -lt 10 ]; then
   echo "the guard test did not run completely"
   exit 1
 fi
-if [ "$(grep -c '^PASS' "$OUT"/imetest-checks.txt)" -lt 18 ]; then
+if [ "$(grep -c '^PASS' "$OUT"/imetest-checks.txt)" -lt 30 ]; then
   echo "the input-method test did not run completely"
   exit 1
 fi

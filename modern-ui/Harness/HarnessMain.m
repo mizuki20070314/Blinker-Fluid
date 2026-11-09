@@ -6,9 +6,13 @@
 #import "BKChrome.h"
 #import "BKCore.h"
 #import "BKHooks.h"
+#import "BKIME.h"
 #import "BKTheme.h"
 
 extern NSArray<NSString *> *HarnessLog(void);
+extern NSArray<NSString *> *ImeMockLog(void);
+extern void ImeMockReset(void);
+extern void ImeMockSetAsyncDelegate(id delegate);
 
 @protocol HarnessHost <BKStockHost>
 - (void)setURL:(NSString *)url;
@@ -237,7 +241,65 @@ extern NSArray<NSString *> *HarnessLog(void);
   setMarked(view, @selector(setMarkedText:selectedRange:), @"き", NSMakeRange(1, 0));
   [view replaceRange:markedRange(view, @selector(markedTextRange)) withText:@"木"];
   [self check:@"replacing the composition: it ends" ok:markedRange(view, @selector(markedTextRange)) == nil detail:nil];
-  [self finish];
+  [self runReturnKeyTest:view];
+}
+
+// The Return key: the keyboard sends the text "\n"; the page has to get an Enter key press instead.
+- (void)runReturnKeyTest:(id)view {
+  NSFileManager *fm = [NSFileManager defaultManager];
+  NSString *pending = [BKSupportPath() stringByAppendingPathComponent:@"return-key.pending"];
+  NSString *strikes = [BKSupportPath() stringByAppendingPathComponent:@"return-key.strikes"];
+  NSString *off = [BKDocumentsPath() stringByAppendingPathComponent:@"disable-return-fix"];
+  [fm removeItemAtPath:pending error:nil];
+  [fm removeItemAtPath:strikes error:nil];
+  [fm removeItemAtPath:off error:nil];
+  void (*setMarked)(id, SEL, NSString *, NSRange) = (void (*)(id, SEL, NSString *, NSRange))objc_msgSend;
+  BKIMEAssumeLegacySystem = YES;           // the simulator is far newer than iOS 12: pretend there is no BrowserEngineKit key path
+  BKIMEReturnKeyHealthyDelay = 0.3;
+
+  [self check:@"the Return key fix is installed" ok:BKIMEReturnKeyEnabled() detail:nil];
+
+  ImeMockReset();
+  [view insertText:@"a"];
+  [self check:@"an ordinary character still goes to the engine" ok:[ImeMockLog() isEqualToArray:@[ @"insertText a" ]] detail:[ImeMockLog() componentsJoinedByString:@" | "]];
+
+  ImeMockReset();
+  [view insertText:@"\n"];
+  NSArray<NSString *> *log = ImeMockLog();
+  [self check:@"the Return key is sent as two key entries, no typed line break" ok:log.count == 2 detail:[log componentsJoinedByString:@" | "]];
+  if (log.count == 2) {
+    [self check:@"... first the key goes down: Enter, Windows key code 13, text \\r, no modifiers" ok:[log[0] isEqualToString:@"handleKeyEntry state=1 keyCode=13 characters=\\r modifiers=0 repeating=0 timestamp=set"] detail:log[0]];
+    [self check:@"... then it comes up" ok:[log[1] isEqualToString:@"handleKeyEntry state=2 keyCode=13 characters=\\r modifiers=0 repeating=0 timestamp=set"] detail:log[1]];
+  }
+  [self check:@"while the key press is being handled a marker file exists" ok:[fm fileExistsAtPath:pending] detail:nil];
+
+  ImeMockReset();
+  setMarked(view, @selector(setMarkedText:selectedRange:), @"か", NSMakeRange(1, 0));
+  [view insertText:@"\n"];
+  [self check:@"with a composition on screen the engine's own handling stays" ok:[ImeMockLog() isEqualToArray:@[ @"insertText \\n" ]] detail:[ImeMockLog() componentsJoinedByString:@" | "]];
+
+  ImeMockReset();
+  ImeMockSetAsyncDelegate([[NSObject alloc] init]);
+  [view insertText:@"\n"];
+  [self check:@"with a system text-input delegate (iOS 17.4+) the engine's own handling stays" ok:[ImeMockLog() isEqualToArray:@[ @"insertText \\n" ]] detail:[ImeMockLog() componentsJoinedByString:@" | "]];
+  ImeMockSetAsyncDelegate(nil);
+
+  // the launch-time check: one unfinished press is a strike, two in a row switch the fix off
+  [fm createFileAtPath:pending contents:[NSData data] attributes:nil];
+  BKIMEReturnKeyCheckLastLaunch();
+  [self check:@"a marker left behind by an earlier launch is removed ..." ok:![fm fileExistsAtPath:pending] detail:nil];
+  [self check:@"... counted as one strike, the fix stays on" ok:[fm fileExistsAtPath:strikes] && ![fm fileExistsAtPath:off] detail:nil];
+  [fm createFileAtPath:pending contents:[NSData data] attributes:nil];
+  BKIMEReturnKeyCheckLastLaunch();
+  [self check:@"a second one in a row writes disable-return-fix" ok:[fm fileExistsAtPath:off] detail:nil];
+  [fm removeItemAtPath:off error:nil];
+  [fm removeItemAtPath:strikes error:nil];
+
+  // the app survived the presses above: after the delay the marker goes away on its own
+  dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.9 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+    [self check:@"a few seconds after the key presses the marker is gone" ok:![fm fileExistsAtPath:pending] detail:nil];
+    [self finish];
+  });
 }
 
 - (id)findSubview:(NSString *)className in:(UIView *)root {

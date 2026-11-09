@@ -61,7 +61,7 @@ jobs:
         run: |
           unzip -p base.ipa 'Payload/*.app/Frameworks/content_shell_framework.framework/content_shell_framework' > fw.bin
           python3 modern-ui/tools/objc_dump.py fw.bin objc.json
-          python3 modern-ui/tools/check_contract.py objc.json modern-ui/Sources/Hooks/BKContract.inc modern-ui/Sources/Hooks/BKContractIME.inc
+          python3 modern-ui/tools/check_contract.py objc.json modern-ui/Sources/Hooks/BKContract.inc modern-ui/Sources/Hooks/BKContractIME.inc modern-ui/Sources/Hooks/BKContractReturnKey.inc
           rm -f fw.bin
 
       - name: Install ldid
@@ -106,6 +106,15 @@ jobs:
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
+
+      - name: The key entry the Return key stand-in imitates (BrowserEngineKit/BEKeyEntry.h of the SDK)
+        run: |
+          H="$(xcrun --sdk iphoneos --show-sdk-path)/System/Library/Frameworks/BrowserEngineKit.framework/Headers/BEKeyEntry.h"
+          grep -E 'BEKeyPressStateDown *= *1,' "$H"
+          grep -E 'BEKeyPressStateUp *= *2,' "$H"
+          grep -E '@property \(nonatomic, readonly\) UIKey \*key;' "$H"
+          grep -E '@property \(nonatomic, readonly\) BEKeyPressState state;' "$H"
+          grep -E '@property \(nonatomic, readonly\) NSTimeInterval timestamp;' "$H"
 
       - name: Build the simulator test app
         run: bash modern-ui/build/build_harness.sh build/harness src/content/shell/browser/shell_platform_delegate_ios.mm

@@ -2,6 +2,39 @@
 // the same (limited) behaviour of the stock implementation - in particular -markedTextRange always answers nil.
 #import <UIKit/UIKit.h>
 
+// What the test looks at: the calls that reach the (stock) implementation.
+static NSMutableArray<NSString *> *gImeLog;
+static id gMockAsyncDelegate;
+
+NSArray<NSString *> *ImeMockLog(void) {
+  return gImeLog ?: @[];
+}
+void ImeMockReset(void) {
+  gImeLog = [NSMutableArray array];
+}
+void ImeMockSetAsyncDelegate(id delegate) {
+  gMockAsyncDelegate = delegate;
+}
+static void ImeNote(NSString *line) {
+  if (!gImeLog) {
+    gImeLog = [NSMutableArray array];
+  }
+  [gImeLog addObject:line];
+}
+
+// The properties of UIKey / BEKeyEntry that the engine reads in -handleKeyEntry:withCompletionHandler:.
+@protocol MockKey <NSObject>
+@property(nonatomic, readonly) NSInteger keyCode;
+@property(nonatomic, readonly, copy) NSString *characters;
+@property(nonatomic, readonly) NSInteger modifierFlags;
+@end
+@protocol MockKeyEntry <NSObject>
+@property(nonatomic, readonly) id<MockKey> key;
+@property(nonatomic, readonly) NSInteger state;
+@property(nonatomic, readonly, getter=isKeyRepeating) BOOL keyRepeating;
+@property(nonatomic, readonly) NSTimeInterval timestamp;
+@end
+
 @interface MockTextPosition : UITextPosition
 @property(nonatomic) CGRect rect;
 @end
@@ -82,7 +115,19 @@
   _marked = nil;
 }
 - (void)insertText:(NSString *)text {
+  ImeNote([NSString stringWithFormat:@"insertText %@", [text isEqualToString:@"\n"] ? @"\\n" : text]);
   _marked = nil;
+}
+// as in the engine: nil below iOS 17.4 (nobody sets a BrowserEngineKit text-input delegate)
+- (id)asyncInputDelegate {
+  return gMockAsyncDelegate;
+}
+- (void)handleKeyEntry:(id<MockKeyEntry>)entry withCompletionHandler:(void (^)(id, BOOL))completionHandler {
+  id<MockKey> key = entry.key;
+  ImeNote([NSString stringWithFormat:@"handleKeyEntry state=%ld keyCode=%ld characters=%@ modifiers=%ld repeating=%d timestamp=%@",
+                                     (long)entry.state, (long)key.keyCode, [key.characters isEqualToString:@"\r"] ? @"\\r" : key.characters,
+                                     (long)key.modifierFlags, entry.keyRepeating ? 1 : 0, entry.timestamp > 0 ? @"set" : @"zero"]);
+  completionHandler(entry, YES);
 }
 - (void)replaceRange:(UITextRange *)range withText:(NSString *)text {
   _marked = nil;
