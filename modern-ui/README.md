@@ -15,7 +15,7 @@ drawn in code), which re‑skins the stock UI classes through the Objective‑C 
 | Loading | thin progress line; the reload icon spins while a page loads |
 | Address entry | full‑screen, suggestions from bookmarks and history on the device; the search provider's suggestions only when opened from the start page (the stock privacy rules, see below) |
 | Tabs | grid of page thumbnails, ✕ on every card, swipe a card away to close, long‑press and drag to reorder, big **+**; closing the only tab opens a fresh one in its place |
-| Menu | bottom sheet with quick actions (new tab, bookmarks, downloads, share) above the stock list; the list screens (settings, bookmarks, history …) get the same look. Two rows are added at the end: **Modern UI** (version, off switch) and **JavaScript Speed Test** |
+| Menu | bottom sheet with quick actions (new tab, bookmarks, downloads, share) above the stock list; the list screens (settings, bookmarks, history …) get the same look. Three rows are added at the end: **Modern UI** (version, off switch), **JavaScript Speed Test** and **Input Test** (a page that lists every key, composition and input event it receives while you type in a one-line field and a text area – for checking the Return key and Japanese input on a device) |
 | Japanese input | the engine's text fields now tell the keyboard when a composition (typed, not yet confirmed) exists, and the Return key reaches the page as a real Enter key press (search boxes, chat fields, forms) – see below |
 | New tab page | logo, search field, favourites (the stock `BlinkShortcuts`), recent sites |
 | Gestures | swipe in from the left / right screen edge = back / forward |

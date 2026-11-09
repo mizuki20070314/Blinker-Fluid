@@ -426,10 +426,10 @@ extern void ImeMockSetAsyncDelegate(id delegate);
     // the two rows we add at the end of the menu: the version / off switch and the JavaScript speed test
     id menuList = [top isKindOfClass:[UINavigationController class]] ? ((UINavigationController *)top).viewControllers.firstObject : nil;
     NSArray *titles = [menuList valueForKey:@"titles"];
-    BOOL rows = titles.count == 16 && [titles[14] isEqualToString:@"Modern UI"] && [titles[15] isEqualToString:BKL(@"JavaScript Speed Test")];
-    [s check:@"the menu ends with the Modern UI and JavaScript Speed Test rows" ok:rows detail:[NSString stringWithFormat:@"%lu rows, last: %@", (unsigned long)titles.count, titles.lastObject]];
+    BOOL rows = titles.count == 17 && [titles[14] isEqualToString:@"Modern UI"] && [titles[15] isEqualToString:BKL(@"JavaScript Speed Test")] && [titles[16] isEqualToString:BKL(@"Input Test")];
+    [s check:@"the menu ends with the Modern UI, JavaScript Speed Test and Input Test rows" ok:rows detail:[NSString stringWithFormat:@"%lu rows, last: %@", (unsigned long)titles.count, titles.lastObject]];
     NSArray *images = [menuList valueForKey:@"imageNames"];
-    [s check:@"... each with an icon" ok:images.count == 16 && [images[15] isEqualToString:@"bolt.fill"] detail:nil];
+    [s check:@"... each with an icon" ok:images.count == 17 && [images[15] isEqualToString:@"bolt.fill"] && [images[16] length] > 0 detail:nil];
     // choose the speed test like a finger would: the sheet goes away, then the page is opened in the current tab
     void (^onSelect)(NSInteger) = [menuList valueForKey:@"onSelect"];
     if (onSelect) {
@@ -447,6 +447,25 @@ extern void ImeMockSetAsyncDelegate(id delegate);
     [s check:@"the speed-test row opens a data: page" ok:opened.length > 400 detail:[NSString stringWithFormat:@"%lu characters", (unsigned long)opened.length]];
     [s check:@"... the page is a complete test (all four timings and the total)" ok:[opened containsString:@"fib%2827%29"] && [opened containsString:@"TOTAL"] && [opened containsString:@"sort%20200k"] && [opened containsString:@"string%20100k"] && [opened containsString:@"loop%2010M"] detail:nil];
     [s check:@"... and the menu went away" ok:![[s topPresented] isKindOfClass:[UINavigationController class]] detail:NSStringFromClass([[s topPresented] class])];
+    [s dismissAll];
+  });
+  STEP(@"closed-menu-again", 1.2, { [s->_host showMainMenu]; });
+  STEP(@"closed-input-test", 1.2, {
+    UIViewController *top = [s topPresented];
+    id menuList = [top isKindOfClass:[UINavigationController class]] ? ((UINavigationController *)top).viewControllers.firstObject : nil;
+    void (^onSelect)(NSInteger) = [menuList valueForKey:@"onSelect"];
+    if (onSelect) {
+      onSelect(16);
+    }
+  });
+  STEP(@"closed-input-test-opened", 0.6, {
+    NSString *opened = nil;
+    for (NSString *line in HarnessLog()) {
+      if ([line hasPrefix:@"open data:text/html,"] && [line containsString:@"Input%20test"]) {
+        opened = line;
+      }
+    }
+    [s check:@"the Input Test row opens its page (key, composition and input events of a field and a text area)" ok:opened.length > 400 && [opened containsString:@"keydown"] && [opened containsString:@"compositionupdate"] && [opened containsString:@"beforeinput"] detail:[NSString stringWithFormat:@"%lu characters", (unsigned long)opened.length]];
     [s dismissAll];
   });
   STEP(@"only-tab", 1.2, {

@@ -357,6 +357,29 @@ static NSString *BKSpeedTestURL(void) {
   return [@"data:text/html," stringByAppendingString:[html stringByAddingPercentEncodingWithAllowedCharacters:allowed]];
 }
 
+// A page that shows what a web page receives while typing: every key / composition / input event of a one-line field (inside a
+// form, so the implicit submission shows too) and of a text area.  For checking the Return key and Japanese input on the device.
+static NSString *BKInputTestURL(void) {
+  NSString *html =
+      @"<!doctype html><meta name=viewport content='width=device-width,initial-scale=1'><title>Input test</title>"
+      @"<body style='font:16px -apple-system,sans-serif;margin:12px'><h3 style='margin:0 0 8px'>Input test</h3>"
+      @"<form id=f><input id=i placeholder='one-line field (in a form)' style='width:100%;box-sizing:border-box;font-size:16px;padding:6px'></form>"
+      @"<textarea id=t placeholder='text area' style='width:100%;box-sizing:border-box;height:64px;font-size:16px;margin-top:8px;padding:6px'></textarea>"
+      @"<pre id=o style='font:11px/1.35 Menlo,monospace;white-space:pre-wrap;margin:8px 0 0'>Type here, press Return; the events appear below (newest first).</pre>"
+      @"<script>var o=document.getElementById('o'),n=0;"
+      @"function log(s){n++;o.textContent=n+' '+s+'\\n'+(n==1?'':o.textContent.split('\\n').slice(0,45).join('\\n'))}"
+      @"document.getElementById('f').addEventListener('submit',function(e){e.preventDefault();log('FORM SUBMITTED (Enter in the one-line field)')});"
+      @"['i','t'].forEach(function(id){var el=document.getElementById(id);"
+      @"['keydown','keypress','keyup','compositionstart','compositionupdate','compositionend','beforeinput','input'].forEach(function(t){"
+      @"el.addEventListener(t,function(ev){var s=(id=='i'?'field ':'area ')+t;"
+      @"if(t.indexOf('key')==0){s+=' key='+ev.key+' keyCode='+ev.keyCode+' charCode='+ev.charCode}"
+      @"if(ev.inputType){s+=' '+ev.inputType}"
+      @"if(ev.data!=null){s+=' data='+JSON.stringify(ev.data)}log(s)})})})</script>";
+  NSMutableCharacterSet *allowed = [NSMutableCharacterSet alphanumericCharacterSet];
+  [allowed addCharactersInString:@"-._~"];
+  return [@"data:text/html," stringByAppendingString:[html stringByAddingPercentEncodingWithAllowedCharacters:allowed]];
+}
+
 static void BKAddModernUIRow(UINavigationController *nav) {
   UIViewController *root = nav.viewControllers.firstObject;
   NSMutableArray *titles = [root valueForKey:@"titles"];
@@ -381,6 +404,11 @@ static void BKAddModernUIRow(UINavigationController *nav) {
   [subtitles addObject:BKL(@"Opens a page that times the JavaScript engine")];
   [images addObject:@"bolt.fill"];
   [rowImages addObject:[NSNull null]];
+  // row 16: shows what a page receives while typing
+  [titles addObject:BKL(@"Input Test")];
+  [subtitles addObject:BKL(@"Shows the key and input events a page receives")];
+  [images addObject:@"chevron.left.forwardslash.chevron.right"];
+  [rowImages addObject:[NSNull null]];
   [root setValue:images forKey:@"imageNames"];
   [root setValue:rowImages forKey:@"rowImages"];
   void (^original)(NSInteger) = [root valueForKey:@"onSelect"];
@@ -388,12 +416,12 @@ static void BKAddModernUIRow(UINavigationController *nav) {
   void (^wrapped)(NSInteger) = ^(NSInteger row) {
     if (row == 14) {
       BKAskToTurnOff(weakNav);
-    } else if (row == 15) {
+    } else if (row == 15 || row == 16) {
       UINavigationController *strongNav = weakNav;
       UIViewController *host = strongNav.presentingViewController;
       [strongNav dismissViewControllerAnimated:YES
                                     completion:^{
-                                      [(id<BKStockHost>)host openUserInput:BKSpeedTestURL()];
+                                      [(id<BKStockHost>)host openUserInput:row == 15 ? BKSpeedTestURL() : BKInputTestURL()];
                                     }];
     } else if (original) {
       original(row);

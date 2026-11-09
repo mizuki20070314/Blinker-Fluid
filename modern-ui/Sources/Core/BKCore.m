@@ -315,6 +315,8 @@ NSString *BKL(NSString *english) {
         @"Turn off" : @"オフにする",
         @"JavaScript Speed Test" : @"JavaScript の速度テスト",
         @"Opens a page that times the JavaScript engine" : @"JavaScript エンジンの速さを測るページを開きます",
+        @"Input Test" : @"入力テスト",
+        @"Shows the key and input events a page receives" : @"ページが受け取るキー入力のイベントを表示します",
         @"Turn off the modern interface? The stock interface comes back after you quit and reopen Blinker Fluid. To turn it on again, delete the file disable-modern-ui in the app's folder (Files app)." :
             @"新しいインターフェースをオフにしますか？Blinker Fluid を終了して開き直すと元の画面に戻ります。もう一度オンにするには、アプリのフォルダ(ファイルアプリ)にある disable-modern-ui というファイルを削除してください。",
       },
